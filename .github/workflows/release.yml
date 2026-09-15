@@ -1,0 +1,38 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Build AgentScreenGuard Executable
+        shell: cmd
+        run: |
+          call build.bat
+
+      - name: Verify Binary
+        shell: pwsh
+        run: |
+          if (!(Test-Path "bin\AgentScreenGuard.exe")) {
+            throw "Build failed: bin\AgentScreenGuard.exe not found!"
+          }
+          $bytes = (Get-Item "bin\AgentScreenGuard.exe").Length
+          Write-Host "Binary built successfully ($bytes bytes)."
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: bin/AgentScreenGuard.exe
+          draft: false
+          prerelease: false
+          generate_release_notes: true

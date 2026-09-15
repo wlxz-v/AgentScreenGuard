@@ -1,0 +1,17 @@
+# Build results
+bin/
+obj/
+*.exe
+*.pdb
+
+# IDE / Editor files
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Windows OS files
+Thumbs.db
+Desktop.ini
