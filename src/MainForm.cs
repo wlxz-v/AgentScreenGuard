@@ -8,16 +8,20 @@ namespace AgentScreenGuard
 {
     public class MainForm : Form
     {
-        // 控件成员
+        // 托盘与定时器
         private NotifyIcon _trayIcon;
         private ContextMenuStrip _trayMenu;
+        private System.Windows.Forms.Timer _statusTimer;
+
+        // 状态徽章
         private Label _lblStatusPower;
         private Label _lblStatusGuard;
+
+        // 设置控件
+        private ComboBox _cboDelay;
         private CheckBox _chkKeepAlive;
         private CheckBox _chkMinToTray;
         private CheckBox _chkAutoStart;
-        private ComboBox _cboDelay;
-        private System.Windows.Forms.Timer _statusTimer;
 
         // 热键 ID
         private const int HOTKEY_ID_SCREEN_OFF = 1001;
@@ -25,285 +29,351 @@ namespace AgentScreenGuard
 
         public MainForm()
         {
-            InitializeComponent();
+            this.AutoScaleDimensions = new SizeF(96F, 96F);
+            this.AutoScaleMode = AutoScaleMode.Dpi;
+
+            InitializeLayout();
             InitializeTrayIcon();
             RegisterGlobalHotkeys();
             UpdatePowerStatusDisplay();
 
-            // 启动定时刷新电源状态 (每 5 秒刷新一次)
+            // 定时刷新电源状态 (每 5 秒)
             _statusTimer = new System.Windows.Forms.Timer();
             _statusTimer.Interval = 5000;
             _statusTimer.Tick += delegate(object s, EventArgs e) { UpdatePowerStatusDisplay(); };
             _statusTimer.Start();
         }
 
-        private void InitializeComponent()
+        // =============================================================
+        // 核心布局构造 (采用流式/卡片化容器，彻底规避 DPI 缩放重叠)
+        // =============================================================
+        private void InitializeLayout()
         {
-            this.Text = "AgentScreenGuard - 屏幕防烧屏与 Agent 保活";
-            this.Size = new Size(720, 560);
+            this.Text = "AgentScreenGuard - 屏幕防烧屏与 Agent 运行保活";
+            this.ClientSize = new Size(680, 680);
+            this.MinimumSize = new Size(680, 680);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
-            this.BackColor = Color.FromArgb(18, 19, 22); // 深黑背景
+            this.BackColor = Color.FromArgb(16, 17, 21); // OLED 极深黑底
             this.ForeColor = Color.FromArgb(240, 240, 245);
             this.Font = new Font("Segoe UI", 9.25f, FontStyle.Regular);
 
-            // 1. 顶部 Header 区域
+            // ---------------------------------------------------------
+            // 1. 顶部状态栏 (Header Panel)
+            // ---------------------------------------------------------
             Panel headerPanel = new Panel();
             headerPanel.Dock = DockStyle.Top;
-            headerPanel.Height = 85;
-            headerPanel.BackColor = Color.FromArgb(24, 25, 30);
+            headerPanel.Height = 82;
+            headerPanel.BackColor = Color.FromArgb(22, 23, 29);
+            headerPanel.Padding = new Padding(24, 12, 24, 12);
             headerPanel.Paint += delegate(object s, PaintEventArgs e)
             {
-                e.Graphics.DrawLine(new Pen(Color.FromArgb(42, 44, 54)), 0, headerPanel.Height - 1, headerPanel.Width, headerPanel.Height - 1);
+                e.Graphics.DrawLine(new Pen(Color.FromArgb(38, 40, 50)), 0, headerPanel.Height - 1, headerPanel.Width, headerPanel.Height - 1);
             };
 
+            TableLayoutPanel headerGrid = new TableLayoutPanel();
+            headerGrid.Dock = DockStyle.Fill;
+            headerGrid.ColumnCount = 2;
+            headerGrid.RowCount = 2;
+            headerGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55f));
+            headerGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45f));
+            headerGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 32f));
+            headerGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 26f));
+
+            // 主标题
             Label lblTitle = new Label();
             lblTitle.Text = "AgentScreenGuard";
             lblTitle.Font = new Font("Segoe UI", 15.5f, FontStyle.Bold);
-            lblTitle.ForeColor = Color.FromArgb(255, 255, 255);
-            lblTitle.Location = new Point(22, 14);
-            lblTitle.AutoSize = true;
-            headerPanel.Controls.Add(lblTitle);
+            lblTitle.ForeColor = Color.White;
+            lblTitle.Dock = DockStyle.Fill;
+            lblTitle.TextAlign = ContentAlignment.MiddleLeft;
+            headerGrid.Controls.Add(lblTitle, 0, 0);
 
+            // 副标题
             Label lblSubtitle = new Label();
-            lblSubtitle.Text = "Windows 屏幕防烧屏 (DPMS D3 0-nit) 与 Agent 长时间运行保活";
-            lblSubtitle.Font = new Font("Segoe UI", 9.0f, FontStyle.Regular);
+            lblSubtitle.Text = "Windows 屏幕防烧屏与 Agent 运行保活平台";
+            lblSubtitle.Font = new Font("Segoe UI", 8.75f, FontStyle.Regular);
             lblSubtitle.ForeColor = Color.FromArgb(156, 163, 175);
-            lblSubtitle.Location = new Point(24, 46);
-            lblSubtitle.AutoSize = true;
-            headerPanel.Controls.Add(lblSubtitle);
+            lblSubtitle.Dock = DockStyle.Fill;
+            lblSubtitle.TextAlign = ContentAlignment.MiddleLeft;
+            headerGrid.Controls.Add(lblSubtitle, 0, 1);
 
-            // 电源状态徽章
+            // 电源状态徽章 (右上)
             _lblStatusPower = new Label();
             _lblStatusPower.Text = "[ ⚡ 交流电源 (AC) ]";
             _lblStatusPower.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
             _lblStatusPower.ForeColor = Color.FromArgb(56, 189, 248);
-            _lblStatusPower.Location = new Point(480, 18);
-            _lblStatusPower.Size = new Size(210, 20);
+            _lblStatusPower.Dock = DockStyle.Fill;
             _lblStatusPower.TextAlign = ContentAlignment.MiddleRight;
-            headerPanel.Controls.Add(_lblStatusPower);
+            headerGrid.Controls.Add(_lblStatusPower, 1, 0);
 
+            // 保活状态徽章 (右下)
             _lblStatusGuard = new Label();
-            _lblStatusGuard.Text = "[ 保活模式: 未激活 ]";
+            _lblStatusGuard.Text = "[ 🛡️ 保活: 未激活 ]";
             _lblStatusGuard.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold);
             _lblStatusGuard.ForeColor = Color.FromArgb(156, 163, 175);
-            _lblStatusGuard.Location = new Point(480, 42);
-            _lblStatusGuard.Size = new Size(210, 20);
+            _lblStatusGuard.Dock = DockStyle.Fill;
             _lblStatusGuard.TextAlign = ContentAlignment.MiddleRight;
-            headerPanel.Controls.Add(_lblStatusGuard);
+            headerGrid.Controls.Add(_lblStatusGuard, 1, 1);
 
+            headerPanel.Controls.Add(headerGrid);
             this.Controls.Add(headerPanel);
 
-            // 2. 主体功能卡片区域 (4 大核心功能)
-            int cardW = 320;
-            int cardH = 135;
-            int startX = 22;
-            int gapX = 30;
-            int startY = 105;
-            int gapY = 20;
+            // ---------------------------------------------------------
+            // 2. 主体卡片容器 (Main Body Container)
+            // ---------------------------------------------------------
+            TableLayoutPanel contentGrid = new TableLayoutPanel();
+            contentGrid.Dock = DockStyle.Fill;
+            contentGrid.ColumnCount = 1;
+            contentGrid.RowCount = 5;
+            contentGrid.Padding = new Padding(22, 14, 22, 14);
+            contentGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+
+            // 4 张核心功能卡片各占 96px 高度，底部设置卡片占 120px
+            contentGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 96f));
+            contentGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 96f));
+            contentGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 96f));
+            contentGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 96f));
+            contentGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 120f));
 
             // 卡片 1: 一键即时熄屏
-            Panel card1 = CreateCardPanel(startX, startY, cardW, cardH);
-            Label c1Title = CreateCardTitle("1. 一键即时熄屏", Color.FromArgb(56, 189, 248));
-            c1Title.Location = new Point(14, 12);
-            card1.Controls.Add(c1Title);
+            Panel card1 = CreateActionCard(
+                "⚡ 一键即时熄屏",
+                "硬件级切断显示信号 (DPMS D3)，OLED 0 nit 完全熄灭，LCD 背光断电。按键防抖，轻晃鼠标即醒。",
+                "全局热键: Ctrl + Alt + S",
+                "即刻熄屏",
+                Color.FromArgb(56, 189, 248),
+                Color.FromArgb(2, 132, 199),
+                delegate { ExecuteScreenOff(); }
+            );
+            contentGrid.Controls.Add(card1, 0, 0);
 
-            Label c1Desc = CreateCardDesc("硬件级 DPMS D3 关断，OLED 0 nit 熄灭，后台 Agent 全速运行。轻晃鼠标或按键即醒。");
-            c1Desc.Location = new Point(14, 38);
-            c1Desc.Size = new Size(292, 40);
-            card1.Controls.Add(c1Desc);
-
-            Button btnScreenOff = CreateStyledButton("即刻熄屏 (Ctrl+Alt+S)", Color.FromArgb(2, 132, 199), Color.White);
-            btnScreenOff.Location = new Point(14, 86);
-            btnScreenOff.Size = new Size(292, 34);
-            btnScreenOff.Click += delegate(object s, EventArgs e) { ExecuteScreenOff(); };
-            card1.Controls.Add(btnScreenOff);
-            this.Controls.Add(card1);
-
-            // 卡片 2: Agent 守护防休眠
-            Panel card2 = CreateCardPanel(startX + cardW + gapX, startY, cardW, cardH);
-            Label c2Title = CreateCardTitle("2. Agent 运行守护 (防休眠)", Color.FromArgb(52, 211, 153));
-            c2Title.Location = new Point(14, 12);
-            card2.Controls.Add(c2Title);
-
-            Label c2Desc = CreateCardDesc("锁定系统执行状态 (ES_SYSTEM_REQUIRED)，阻止 Modern Standby 休眠，长夜通宵不断线。");
-            c2Desc.Location = new Point(14, 38);
-            c2Desc.Size = new Size(292, 40);
-            card2.Controls.Add(c2Desc);
-
-            Button btnGuardAndOff = CreateStyledButton("守护并立即熄屏", Color.FromArgb(5, 150, 105), Color.White);
-            btnGuardAndOff.Location = new Point(14, 86);
-            btnGuardAndOff.Size = new Size(292, 34);
-            btnGuardAndOff.Click += delegate(object s, EventArgs e)
-            {
-                PowerManager.SetKeepAlive(true);
-                _chkKeepAlive.Checked = true;
-                UpdatePowerStatusDisplay();
-                ExecuteScreenOff();
-            };
-            card2.Controls.Add(btnGuardAndOff);
-            this.Controls.Add(card2);
+            // 卡片 2: Agent 运行守护 (防休眠)
+            Panel card2 = CreateActionCard(
+                "🛡️ Agent 运行守护 (防休眠)",
+                "调用 Win32 SetThreadExecutionState，阻止整机进入 Modern Standby 睡眠挂起，CPU/网络全速运转。",
+                "离开模式: 屏幕熄灭但后台推理/编译任务绝不中断",
+                "守护并熄屏",
+                Color.FromArgb(52, 211, 153),
+                Color.FromArgb(5, 150, 105),
+                delegate
+                {
+                    PowerManager.SetKeepAlive(true);
+                    _chkKeepAlive.Checked = true;
+                    UpdatePowerStatusDisplay();
+                    ExecuteScreenOff();
+                }
+            );
+            contentGrid.Controls.Add(card2, 0, 1);
 
             // 卡片 3: 锁定工作站并熄屏
-            Panel card3 = CreateCardPanel(startX, startY + cardH + gapY, cardW, cardH);
-            Label c3Title = CreateCardTitle("3. 锁定工作站并熄屏", Color.FromArgb(167, 139, 250));
-            c3Title.Location = new Point(14, 12);
-            card3.Controls.Add(c3Title);
-
-            Label c3Desc = CreateCardDesc("同步执行 LockWorkStation (Win+L) 并切断显示信号，兼顾外出防窥隐私与任务运行。");
-            c3Desc.Location = new Point(14, 38);
-            c3Desc.Size = new Size(292, 40);
-            card3.Controls.Add(c3Desc);
-
-            Button btnLockOff = CreateStyledButton("锁定并熄屏", Color.FromArgb(109, 40, 217), Color.White);
-            btnLockOff.Location = new Point(14, 86);
-            btnLockOff.Size = new Size(292, 34);
-            btnLockOff.Click += delegate(object s, EventArgs e) { ExecuteLockAndTurnOff(); };
-            card3.Controls.Add(btnLockOff);
-            this.Controls.Add(card3);
+            Panel card3 = CreateActionCard(
+                "🔒 锁定工作站并熄屏",
+                "先执行 LockWorkStation (Win+L) 锁定当前桌面，再硬件切断显示信号，外出防窥更安全。",
+                "适用工位离开、外出防窥与后台无人值守运行",
+                "锁定并熄屏",
+                Color.FromArgb(167, 139, 250),
+                Color.FromArgb(109, 40, 217),
+                delegate { ExecuteLockAndTurnOff(); }
+            );
+            contentGrid.Controls.Add(card3, 0, 2);
 
             // 卡片 4: OLED 纯黑置顶幕布
-            Panel card4 = CreateCardPanel(startX + cardW + gapX, startY + cardH + gapY, cardW, cardH);
-            Label c4Title = CreateCardTitle("4. OLED 纯黑置顶幕布", Color.FromArgb(251, 191, 36));
-            c4Title.Location = new Point(14, 12);
-            card4.Controls.Add(c4Title);
+            Panel card4 = CreateActionCard(
+                "⬛ OLED 纯黑置顶幕布",
+                "覆盖全屏纯黑窗体 (#000000)，OLED 0 nit 防烧屏且不切断 DPMS 链路，显存帧缓冲区与分辨率完好保留。",
+                "全局热键: Ctrl + Alt + B (按 Esc 键退出) | 适用截屏/视觉识别 Agent",
+                "全屏纯黑幕布",
+                Color.FromArgb(251, 191, 36),
+                Color.FromArgb(217, 119, 6),
+                delegate { BlackMaskForm.ShowMask(); }
+            );
+            contentGrid.Controls.Add(card4, 0, 3);
 
-            Label c4Desc = CreateCardDesc("适用视觉/截屏 Agent (pyautogui/CV)，0 nit 像素关断且保持显存渲染不变。按 Esc 退出。");
-            c4Desc.Location = new Point(14, 38);
-            c4Desc.Size = new Size(292, 40);
-            card4.Controls.Add(c4Desc);
+            // 卡片 5: 系统设置与参数控制
+            Panel card5 = CreateSettingsCard();
+            contentGrid.Controls.Add(card5, 0, 4);
 
-            Button btnBlackMask = CreateStyledButton("全屏纯黑幕布 (Ctrl+Alt+B)", Color.FromArgb(217, 119, 6), Color.White);
-            btnBlackMask.Location = new Point(14, 86);
-            btnBlackMask.Size = new Size(292, 34);
-            btnBlackMask.Click += delegate(object s, EventArgs e) { BlackMaskForm.ShowMask(); };
-            card4.Controls.Add(btnBlackMask);
-            this.Controls.Add(card4);
+            this.Controls.Add(contentGrid);
+        }
 
-            // 3. 底部设置与参数控制区
-            int bottomY = startY + (cardH + gapY) * 2;
-            Panel bottomPanel = CreateCardPanel(startX, bottomY, cardW * 2 + gapX, 85);
+        // =============================================================
+        // 卡片组件工厂 (保证在任何 DPI 缩放下水平绝对对称、文字垂直居中)
+        // =============================================================
+        private Panel CreateActionCard(string title, string desc, string hint, string buttonText,
+            Color accentColor, Color buttonColor, EventHandler onAction)
+        {
+            Panel card = new Panel();
+            card.Dock = DockStyle.Fill;
+            card.Margin = new Padding(0, 0, 0, 10);
+            card.BackColor = Color.FromArgb(25, 26, 32);
+            card.Padding = new Padding(16, 10, 16, 10);
+            card.Paint += delegate(object s, PaintEventArgs e)
+            {
+                ControlPaint.DrawBorder(e.Graphics, card.ClientRectangle, Color.FromArgb(40, 42, 52), ButtonBorderStyle.Solid);
+            };
 
-            // 防抖延时
+            TableLayoutPanel layout = new TableLayoutPanel();
+            layout.Dock = DockStyle.Fill;
+            layout.ColumnCount = 2;
+            layout.RowCount = 1;
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f)); // 左侧文本填满
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 138f)); // 右侧按钮固定宽
+
+            // 左侧垂直信息容器
+            Panel textPanel = new Panel();
+            textPanel.Dock = DockStyle.Fill;
+
+            Label lblTitle = new Label();
+            lblTitle.Text = title;
+            lblTitle.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
+            lblTitle.ForeColor = accentColor;
+            lblTitle.Dock = DockStyle.Top;
+            lblTitle.Height = 22;
+            textPanel.Controls.Add(lblTitle);
+
+            Label lblDesc = new Label();
+            lblDesc.Text = desc;
+            lblDesc.Font = new Font("Segoe UI", 8.5f, FontStyle.Regular);
+            lblDesc.ForeColor = Color.FromArgb(156, 163, 175);
+            lblDesc.Dock = DockStyle.Fill;
+            lblDesc.TextAlign = ContentAlignment.MiddleLeft;
+            textPanel.Controls.Add(lblDesc);
+
+            Label lblHint = new Label();
+            lblHint.Text = hint;
+            lblHint.Font = new Font("Segoe UI", 7.75f, FontStyle.Regular);
+            lblHint.ForeColor = Color.FromArgb(107, 114, 128);
+            lblHint.Dock = DockStyle.Bottom;
+            lblHint.Height = 16;
+            textPanel.Controls.Add(lblHint);
+
+            layout.Controls.Add(textPanel, 0, 0);
+
+            // 右侧按钮容器 (垂直居中)
+            Panel btnPanel = new Panel();
+            btnPanel.Dock = DockStyle.Fill;
+
+            Button btn = new Button();
+            btn.Text = buttonText;
+            btn.Size = new Size(130, 38);
+            btn.Location = new Point(4, 17);
+            btn.FlatStyle = FlatStyle.Flat;
+            btn.FlatAppearance.BorderSize = 0;
+            btn.BackColor = buttonColor;
+            btn.ForeColor = Color.White;
+            btn.Font = new Font("Segoe UI", 9.25f, FontStyle.Bold);
+            btn.Cursor = Cursors.Hand;
+            btn.Click += onAction;
+            btnPanel.Controls.Add(btn);
+
+            layout.Controls.Add(btnPanel, 1, 0);
+            card.Controls.Add(layout);
+            return card;
+        }
+
+        private Panel CreateSettingsCard()
+        {
+            Panel card = new Panel();
+            card.Dock = DockStyle.Fill;
+            card.Margin = new Padding(0, 0, 0, 0);
+            card.BackColor = Color.FromArgb(25, 26, 32);
+            card.Padding = new Padding(16, 12, 16, 12);
+            card.Paint += delegate(object s, PaintEventArgs e)
+            {
+                ControlPaint.DrawBorder(e.Graphics, card.ClientRectangle, Color.FromArgb(40, 42, 52), ButtonBorderStyle.Solid);
+            };
+
+            TableLayoutPanel layout = new TableLayoutPanel();
+            layout.Dock = DockStyle.Fill;
+            layout.ColumnCount = 1;
+            layout.RowCount = 2;
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
+
+            // 第一行：延时配置 + 常驻防休眠复选框
+            FlowLayoutPanel row1 = new FlowLayoutPanel();
+            row1.Dock = DockStyle.Fill;
+            row1.WrapContents = false;
+
             Label lblDelay = new Label();
-            lblDelay.Text = "熄屏防抖延时:";
-            lblDelay.Location = new Point(16, 16);
+            lblDelay.Text = "防抖延时:";
             lblDelay.AutoSize = true;
             lblDelay.ForeColor = Color.FromArgb(209, 213, 219);
-            bottomPanel.Controls.Add(lblDelay);
+            lblDelay.Margin = new Padding(0, 5, 6, 0);
+            row1.Controls.Add(lblDelay);
 
             _cboDelay = new ComboBox();
             _cboDelay.DropDownStyle = ComboBoxStyle.DropDownList;
             _cboDelay.Items.AddRange(new object[] { "500 ms", "800 ms", "1000 ms (推荐)", "1500 ms", "2000 ms" });
             _cboDelay.SelectedIndex = 2;
-            _cboDelay.Location = new Point(110, 13);
             _cboDelay.Size = new Size(130, 24);
-            _cboDelay.BackColor = Color.FromArgb(36, 38, 48);
+            _cboDelay.BackColor = Color.FromArgb(34, 36, 44);
             _cboDelay.ForeColor = Color.White;
-            bottomPanel.Controls.Add(_cboDelay);
+            _cboDelay.Margin = new Padding(0, 2, 24, 0);
+            row1.Controls.Add(_cboDelay);
 
-            // 防休眠常驻复选框
             _chkKeepAlive = new CheckBox();
             _chkKeepAlive.Text = "保持系统防休眠 (常驻阻止 Windows 睡眠)";
-            _chkKeepAlive.Location = new Point(265, 14);
             _chkKeepAlive.AutoSize = true;
             _chkKeepAlive.ForeColor = Color.FromArgb(209, 213, 219);
-            _chkKeepAlive.CheckedChanged += delegate(object s, EventArgs e)
+            _chkKeepAlive.Margin = new Padding(0, 4, 0, 0);
+            _chkKeepAlive.CheckedChanged += delegate
             {
                 PowerManager.SetKeepAlive(_chkKeepAlive.Checked);
                 UpdatePowerStatusDisplay();
             };
-            bottomPanel.Controls.Add(_chkKeepAlive);
+            row1.Controls.Add(_chkKeepAlive);
 
-            // 最小化到托盘
+            layout.Controls.Add(row1, 0, 0);
+
+            // 第二行：托盘设置 + 开机启动 + 诊断按钮
+            FlowLayoutPanel row2 = new FlowLayoutPanel();
+            row2.Dock = DockStyle.Fill;
+            row2.WrapContents = false;
+
             _chkMinToTray = new CheckBox();
-            _chkMinToTray.Text = "点击关闭时最小化到系统托盘";
+            _chkMinToTray.Text = "关闭时最小化到系统托盘";
             _chkMinToTray.Checked = true;
-            _chkMinToTray.Location = new Point(16, 48);
             _chkMinToTray.AutoSize = true;
             _chkMinToTray.ForeColor = Color.FromArgb(156, 163, 175);
-            bottomPanel.Controls.Add(_chkMinToTray);
+            _chkMinToTray.Margin = new Padding(0, 6, 20, 0);
+            row2.Controls.Add(_chkMinToTray);
 
-            // 开机自启动
             _chkAutoStart = new CheckBox();
-            _chkAutoStart.Text = "开机随系统自动启动";
+            _chkAutoStart.Text = "开机随系统启动";
             _chkAutoStart.Checked = CheckIsAutoStart();
-            _chkAutoStart.Location = new Point(265, 48);
             _chkAutoStart.AutoSize = true;
             _chkAutoStart.ForeColor = Color.FromArgb(156, 163, 175);
-            _chkAutoStart.CheckedChanged += delegate(object s, EventArgs e)
+            _chkAutoStart.Margin = new Padding(0, 6, 20, 0);
+            _chkAutoStart.CheckedChanged += delegate
             {
                 SetAutoStart(_chkAutoStart.Checked);
             };
-            bottomPanel.Controls.Add(_chkAutoStart);
+            row2.Controls.Add(_chkAutoStart);
 
-            // 诊断按钮
             Button btnDiag = new Button();
             btnDiag.Text = "待机策略诊断";
+            btnDiag.Size = new Size(115, 28);
             btnDiag.FlatStyle = FlatStyle.Flat;
             btnDiag.FlatAppearance.BorderColor = Color.FromArgb(75, 85, 99);
-            btnDiag.BackColor = Color.FromArgb(36, 38, 48);
+            btnDiag.BackColor = Color.FromArgb(34, 36, 44);
             btnDiag.ForeColor = Color.FromArgb(209, 213, 219);
-            btnDiag.Location = new Point(540, 26);
-            btnDiag.Size = new Size(115, 34);
-            btnDiag.Click += delegate(object s, EventArgs e) { ShowDiagnostics(); };
-            bottomPanel.Controls.Add(btnDiag);
+            btnDiag.Font = new Font("Segoe UI", 8.5f);
+            btnDiag.Margin = new Padding(20, 2, 0, 0);
+            btnDiag.Cursor = Cursors.Hand;
+            btnDiag.Click += delegate { ShowDiagnostics(); };
+            row2.Controls.Add(btnDiag);
 
-            this.Controls.Add(bottomPanel);
+            layout.Controls.Add(row2, 0, 1);
+            card.Controls.Add(layout);
+            return card;
         }
 
-        // -------------------------------------------------------------
-        // UI 构造辅助函数
-        // -------------------------------------------------------------
-        private Panel CreateCardPanel(int x, int y, int width, int height)
-        {
-            Panel p = new Panel();
-            p.Location = new Point(x, y);
-            p.Size = new Size(width, height);
-            p.BackColor = Color.FromArgb(26, 27, 33);
-            p.Paint += delegate(object s, PaintEventArgs e)
-            {
-                ControlPaint.DrawBorder(e.Graphics, p.ClientRectangle, Color.FromArgb(44, 46, 56), ButtonBorderStyle.Solid);
-            };
-            return p;
-        }
-
-        private Label CreateCardTitle(string text, Color color)
-        {
-            Label lbl = new Label();
-            lbl.Text = text;
-            lbl.Font = new Font("Segoe UI", 10.25f, FontStyle.Bold);
-            lbl.ForeColor = color;
-            lbl.AutoSize = true;
-            return lbl;
-        }
-
-        private Label CreateCardDesc(string text)
-        {
-            Label lbl = new Label();
-            lbl.Text = text;
-            lbl.Font = new Font("Segoe UI", 8.75f, FontStyle.Regular);
-            lbl.ForeColor = Color.FromArgb(156, 163, 175);
-            return lbl;
-        }
-
-        private Button CreateStyledButton(string text, Color bg, Color fg)
-        {
-            Button btn = new Button();
-            btn.Text = text;
-            btn.FlatStyle = FlatStyle.Flat;
-            btn.FlatAppearance.BorderSize = 0;
-            btn.BackColor = bg;
-            btn.ForeColor = fg;
-            btn.Font = new Font("Segoe UI", 9.25f, FontStyle.Bold);
-            btn.Cursor = Cursors.Hand;
-            return btn;
-        }
-
-        // -------------------------------------------------------------
-        // 系统托盘与图标
-        // -------------------------------------------------------------
+        // =============================================================
+        // 系统托盘与矢量图标渲染
+        // =============================================================
         private void InitializeTrayIcon()
         {
             _trayMenu = new ContextMenuStrip();
@@ -317,9 +387,9 @@ namespace AgentScreenGuard
 
             _trayMenu.Items.Add("一键即时熄屏 (Ctrl+Alt+S)", null, delegate { ExecuteScreenOff(); });
             _trayMenu.Items.Add("全屏纯黑幕布 (Ctrl+Alt+B)", null, delegate { BlackMaskForm.ShowMask(); });
-            _trayMenu.Items.Add("锁定并熄屏", null, delegate { ExecuteLockAndTurnOff(); });
+            _trayMenu.Items.Add("锁定工作站并熄屏", null, delegate { ExecuteLockAndTurnOff(); });
 
-            ToolStripMenuItem itemToggleKeepAlive = new ToolStripMenuItem("切换系统防休眠保活", null, delegate
+            ToolStripMenuItem itemToggleKeepAlive = new ToolStripMenuItem("切换防休眠保活", null, delegate
             {
                 _chkKeepAlive.Checked = !_chkKeepAlive.Checked;
             });
@@ -344,23 +414,19 @@ namespace AgentScreenGuard
 
         private Icon GenerateTrayIcon()
         {
-            // 动态绘制一个精致的 16x16 屏幕监视器矢量图标，免去外部 .ico 资源依赖
             Bitmap bmp = new Bitmap(16, 16);
             using (Graphics g = Graphics.FromImage(bmp))
             {
                 g.Clear(Color.Transparent);
-                // 屏幕外边框 (青蓝色)
                 using (Pen pen = new Pen(Color.FromArgb(56, 189, 248), 1.5f))
                 {
                     g.DrawRectangle(pen, 1, 1, 13, 9);
                 }
-                // 底座支架
                 using (Brush b = new SolidBrush(Color.FromArgb(148, 163, 184)))
                 {
                     g.FillRectangle(b, 7, 11, 2, 2);
                     g.FillRectangle(b, 4, 13, 8, 2);
                 }
-                // 屏幕内部指示点 (绿色代表保活/就绪)
                 using (Brush b = new SolidBrush(Color.FromArgb(52, 211, 153)))
                 {
                     g.FillEllipse(b, 5, 4, 4, 4);
@@ -376,14 +442,12 @@ namespace AgentScreenGuard
             this.Activate();
         }
 
-        // -------------------------------------------------------------
-        // 全局热键注册与窗口事件
-        // -------------------------------------------------------------
+        // =============================================================
+        // 全局热键
+        // =============================================================
         private void RegisterGlobalHotkeys()
         {
-            // Ctrl + Alt + S = 立即熄屏
             PowerManager.RegisterHotKey(this.Handle, HOTKEY_ID_SCREEN_OFF, PowerManager.MOD_CONTROL | PowerManager.MOD_ALT, (uint)Keys.S);
-            // Ctrl + Alt + B = 纯黑幕布
             PowerManager.RegisterHotKey(this.Handle, HOTKEY_ID_BLACK_MASK, PowerManager.MOD_CONTROL | PowerManager.MOD_ALT, (uint)Keys.B);
         }
 
@@ -430,9 +494,9 @@ namespace AgentScreenGuard
             base.OnFormClosing(e);
         }
 
-        // -------------------------------------------------------------
-        // 动作执行与电源状态管理
-        // -------------------------------------------------------------
+        // =============================================================
+        // 核心功能触发
+        // =============================================================
         private int GetSelectedDelayMs()
         {
             switch (_cboDelay.SelectedIndex)
@@ -477,12 +541,12 @@ namespace AgentScreenGuard
 
             if (PowerManager.IsKeepAliveActive)
             {
-                _lblStatusGuard.Text = "[ 保活: 已激活 (阻止休眠) ]";
+                _lblStatusGuard.Text = "[ 🛡️ 保活: 已激活 (阻止休眠) ]";
                 _lblStatusGuard.ForeColor = Color.FromArgb(52, 211, 153);
             }
             else
             {
-                _lblStatusGuard.Text = "[ 保活: 未激活 (跟随系统) ]";
+                _lblStatusGuard.Text = "[ 🛡️ 保活: 未激活 (跟随系统) ]";
                 _lblStatusGuard.ForeColor = Color.FromArgb(156, 163, 175);
             }
         }
@@ -520,9 +584,9 @@ namespace AgentScreenGuard
             }
         }
 
-        // -------------------------------------------------------------
-        // 开机自启动注册表操作
-        // -------------------------------------------------------------
+        // =============================================================
+        // 开机自启动
+        // =============================================================
         private const string RUN_REG_KEY = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
         private const string APP_REG_NAME = "AgentScreenGuard";
 

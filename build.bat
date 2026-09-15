@@ -31,7 +31,7 @@ set "SRC_DIR=%~dp0src"
 set "MANIFEST=%SRC_DIR%\app.manifest"
 
 echo [*] 正在执行无依赖高保真编译 (Per-Monitor V2 DPI, Target: Winexe)...
-"%CSC_EXE%" /nologo /t:winexe /optimize+ /platform:anycpu /win32manifest:"%MANIFEST%" /out:"%OUT_EXE%" /r:System.dll,System.Windows.Forms.dll,System.Drawing.dll "%SRC_DIR%\*.cs"
+"%CSC_EXE%" /nologo /t:winexe /optimize+ /platform:anycpu /appconfig:"%SRC_DIR%\app.config" /win32manifest:"%MANIFEST%" /out:"%OUT_EXE%" /r:System.dll,System.Windows.Forms.dll,System.Drawing.dll "%SRC_DIR%\*.cs"
 
 if %errorlevel% neq 0 (
     echo [!] 编译失败，请检查源代码语法或依赖引用。
