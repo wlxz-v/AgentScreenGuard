@@ -2,12 +2,25 @@ using System;
 using System.Drawing;
 using System.Diagnostics;
 using System.Windows.Forms;
+using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
 namespace AgentScreenGuard
 {
     public class MainForm : Form
     {
+        // Win32 DPI API
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForSystem();
+
+        // 动态 DPI 参数化缩放引擎
+        private float _dpiScale = 1.0f;
+        public int S(int pixel96) { return (int)Math.Round(pixel96 * _dpiScale); }
+        public float Sf(float pixel96) { return (float)(pixel96 * _dpiScale); }
+
         // 托盘与定时器
         private NotifyIcon _trayIcon;
         private ContextMenuStrip _trayMenu;
@@ -29,8 +42,19 @@ namespace AgentScreenGuard
 
         public MainForm()
         {
-            this.AutoScaleDimensions = new SizeF(96F, 96F);
-            this.AutoScaleMode = AutoScaleMode.Dpi;
+            this.AutoScaleMode = AutoScaleMode.None; // 完全受控于 _dpiScale 参数化缩放引擎
+
+            uint dpi = 96;
+            try
+            {
+                dpi = GetDpiForWindow(this.Handle);
+            }
+            catch
+            {
+                try { dpi = GetDpiForSystem(); } catch { dpi = 96; }
+            }
+            if (dpi == 0) dpi = 96;
+            _dpiScale = (float)dpi / 96.0f;
 
             InitializeLayout();
             InitializeTrayIcon();
@@ -45,13 +69,13 @@ namespace AgentScreenGuard
         }
 
         // =============================================================
-        // 核心布局构造 (严格采用 AutoSize + 流式布局，彻底根除文字截断)
+        // 核心布局构造 (动态参数化 DPI 缩放，彻底消除文字截断与空间挤压)
         // =============================================================
         private void InitializeLayout()
         {
             this.Text = "AgentScreenGuard - 屏幕防烧屏与 Agent 运行保活";
-            this.ClientSize = new Size(720, 720);
-            this.MinimumSize = new Size(720, 720);
+            this.ClientSize = new Size(S(740), S(750));
+            this.MinimumSize = this.Size;
             this.StartPosition = FormStartPosition.CenterScreen;
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
             this.MaximizeBox = false;
@@ -60,13 +84,13 @@ namespace AgentScreenGuard
             this.Font = new Font("Microsoft YaHei UI", 9.0f, FontStyle.Regular);
 
             // ---------------------------------------------------------
-            // 1. 顶部状态栏 (Header Panel: 高度提升至 90px，避免大字体切顶切底)
+            // 1. 顶部状态栏
             // ---------------------------------------------------------
             Panel headerPanel = new Panel();
             headerPanel.Dock = DockStyle.Top;
-            headerPanel.Height = 90;
+            headerPanel.Height = S(92);
             headerPanel.BackColor = Color.FromArgb(22, 23, 29);
-            headerPanel.Padding = new Padding(24, 12, 24, 12);
+            headerPanel.Padding = new Padding(S(24), S(12), S(24), S(12));
             headerPanel.Paint += delegate(object s, PaintEventArgs e)
             {
                 e.Graphics.DrawLine(new Pen(Color.FromArgb(38, 40, 50)), 0, headerPanel.Height - 1, headerPanel.Width, headerPanel.Height - 1);
@@ -78,8 +102,8 @@ namespace AgentScreenGuard
             headerGrid.RowCount = 2;
             headerGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55f));
             headerGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45f));
-            headerGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 38f)); // 行高增加到 38px 确保大标题不截断
-            headerGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 28f));
+            headerGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, Sf(42f)));
+            headerGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, Sf(26f)));
 
             // 主标题
             Label lblTitle = new Label();
@@ -121,21 +145,20 @@ namespace AgentScreenGuard
             this.Controls.Add(headerPanel);
 
             // ---------------------------------------------------------
-            // 2. 主体卡片容器 (Main Body Container: 卡片高度从 96px 扩充至 108px)
+            // 2. 主体卡片容器
             // ---------------------------------------------------------
             TableLayoutPanel contentGrid = new TableLayoutPanel();
             contentGrid.Dock = DockStyle.Fill;
             contentGrid.ColumnCount = 1;
             contentGrid.RowCount = 5;
-            contentGrid.Padding = new Padding(22, 14, 22, 14);
+            contentGrid.Padding = new Padding(S(20), S(12), S(20), S(12));
             contentGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
-            // 4 张核心功能卡片各扩充到 108px，给两行中文描述留足 45px+ 的呼吸空间
-            contentGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 108f));
-            contentGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 108f));
-            contentGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 108f));
-            contentGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 108f));
-            contentGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 126f)); // 底部设置栏扩充到 126px
+            contentGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, Sf(116f)));
+            contentGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, Sf(116f)));
+            contentGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, Sf(116f)));
+            contentGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, Sf(116f)));
+            contentGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, Sf(138f)));
 
             // 卡片 1: 一键即时熄屏
             Panel card1 = CreateActionCard(
@@ -199,16 +222,16 @@ namespace AgentScreenGuard
         }
 
         // =============================================================
-        // 卡片组件工厂 (左侧采用 AutoSize 网格分层，彻底杜绝文字重叠或截断)
+        // 卡片组件工厂 (参数化 DPI 布局，动态自适应居中)
         // =============================================================
         private Panel CreateActionCard(string title, string desc, string hint, string buttonText,
             Color accentColor, Color buttonColor, EventHandler onAction)
         {
             Panel card = new Panel();
             card.Dock = DockStyle.Fill;
-            card.Margin = new Padding(0, 0, 0, 10);
+            card.Margin = new Padding(0, 0, 0, S(10));
             card.BackColor = Color.FromArgb(25, 26, 32);
-            card.Padding = new Padding(18, 12, 18, 12);
+            card.Padding = new Padding(S(18), S(10), S(18), S(10));
             card.Paint += delegate(object s, PaintEventArgs e)
             {
                 ControlPaint.DrawBorder(e.Graphics, card.ClientRectangle, Color.FromArgb(40, 42, 52), ButtonBorderStyle.Solid);
@@ -218,25 +241,24 @@ namespace AgentScreenGuard
             layout.Dock = DockStyle.Fill;
             layout.ColumnCount = 2;
             layout.RowCount = 1;
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f)); // 左侧文本填满剩余宽度
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 146f)); // 右侧按钮扩充到 146px，容纳 6 字大字体
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Sf(160f)));
 
-            // 左侧垂直信息容器：3 行自适应网格，标题与提示 AutoSize，描述填满剩余高度
             TableLayoutPanel textLayout = new TableLayoutPanel();
             textLayout.Dock = DockStyle.Fill;
             textLayout.ColumnCount = 1;
             textLayout.RowCount = 3;
             textLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            textLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));        // 标题行高自适应 (不设固定死 22px)
-            textLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));    // 描述两行文字充分享用剩余空间
-            textLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));        // 提示行高自适应 (不设固定死 16px)
+            textLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            textLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            textLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
             Label lblTitle = new Label();
             lblTitle.Text = title;
             lblTitle.Font = new Font("Microsoft YaHei UI", 10.5f, FontStyle.Bold);
             lblTitle.ForeColor = accentColor;
             lblTitle.AutoSize = true;
-            lblTitle.Margin = new Padding(0, 0, 0, 3);
+            lblTitle.Margin = new Padding(0, 0, 0, S(3));
             textLayout.Controls.Add(lblTitle, 0, 0);
 
             Label lblDesc = new Label();
@@ -245,7 +267,7 @@ namespace AgentScreenGuard
             lblDesc.ForeColor = Color.FromArgb(156, 163, 175);
             lblDesc.Dock = DockStyle.Fill;
             lblDesc.TextAlign = ContentAlignment.MiddleLeft;
-            lblDesc.Margin = new Padding(0, 0, 0, 3);
+            lblDesc.Margin = new Padding(0, 0, 0, S(3));
             textLayout.Controls.Add(lblDesc, 0, 1);
 
             Label lblHint = new Label();
@@ -258,15 +280,13 @@ namespace AgentScreenGuard
 
             layout.Controls.Add(textLayout, 0, 0);
 
-            // 右侧按钮容器 (垂直水平居中)
+            // 右侧按钮容器 (自适应居中)
             Panel btnPanel = new Panel();
             btnPanel.Dock = DockStyle.Fill;
 
             Button btn = new Button();
             btn.Text = buttonText;
-            btn.Size = new Size(138, 42); // 宽 138px，高 42px，即使 6 个汉字也留足安全内边距
-            btn.Anchor = AnchorStyles.None;
-            btn.Location = new Point(4, 21); // 垂直完全居中
+            btn.Size = new Size(S(150), S(42));
             btn.FlatStyle = FlatStyle.Flat;
             btn.FlatAppearance.BorderSize = 0;
             btn.BackColor = buttonColor;
@@ -274,8 +294,18 @@ namespace AgentScreenGuard
             btn.Font = new Font("Microsoft YaHei UI", 9.25f, FontStyle.Bold);
             btn.Cursor = Cursors.Hand;
             btn.Click += onAction;
-            btnPanel.Controls.Add(btn);
 
+            EventHandler centerBtn = delegate
+            {
+                btn.Location = new Point(
+                    Math.Max(0, (btnPanel.ClientSize.Width - btn.Width) / 2),
+                    Math.Max(0, (btnPanel.ClientSize.Height - btn.Height) / 2)
+                );
+            };
+            btnPanel.SizeChanged += centerBtn;
+            centerBtn(null, null);
+
+            btnPanel.Controls.Add(btn);
             layout.Controls.Add(btnPanel, 1, 0);
             card.Controls.Add(layout);
             return card;
@@ -287,7 +317,7 @@ namespace AgentScreenGuard
             card.Dock = DockStyle.Fill;
             card.Margin = new Padding(0, 0, 0, 0);
             card.BackColor = Color.FromArgb(25, 26, 32);
-            card.Padding = new Padding(18, 14, 18, 14);
+            card.Padding = new Padding(S(18), S(12), S(18), S(12));
             card.Paint += delegate(object s, PaintEventArgs e)
             {
                 ControlPaint.DrawBorder(e.Graphics, card.ClientRectangle, Color.FromArgb(40, 42, 52), ButtonBorderStyle.Solid);
@@ -304,33 +334,33 @@ namespace AgentScreenGuard
             FlowLayoutPanel row1 = new FlowLayoutPanel();
             row1.Dock = DockStyle.Fill;
             row1.WrapContents = false;
-            row1.Padding = new Padding(0, 6, 0, 0);
+            row1.Padding = new Padding(0, S(4), 0, 0);
 
             Label lblDelay = new Label();
             lblDelay.Text = "防抖延时:";
             lblDelay.AutoSize = true;
             lblDelay.Font = new Font("Microsoft YaHei UI", 9.0f);
             lblDelay.ForeColor = Color.FromArgb(209, 213, 219);
-            lblDelay.Margin = new Padding(0, 5, 8, 0);
+            lblDelay.Margin = new Padding(0, S(5), S(8), 0);
             row1.Controls.Add(lblDelay);
 
             _cboDelay = new ComboBox();
             _cboDelay.DropDownStyle = ComboBoxStyle.DropDownList;
             _cboDelay.Items.AddRange(new object[] { "500 ms", "800 ms", "1000 ms (推荐)", "1500 ms", "2000 ms" });
             _cboDelay.SelectedIndex = 2;
-            _cboDelay.Size = new Size(135, 26);
+            _cboDelay.Size = new Size(S(140), S(28));
             _cboDelay.Font = new Font("Microsoft YaHei UI", 9.0f);
             _cboDelay.BackColor = Color.FromArgb(34, 36, 44);
             _cboDelay.ForeColor = Color.White;
-            _cboDelay.Margin = new Padding(0, 2, 24, 0);
+            _cboDelay.Margin = new Padding(0, S(2), S(24), 0);
             row1.Controls.Add(_cboDelay);
 
             _chkKeepAlive = new CheckBox();
-            _chkKeepAlive.Text = "保持系统防休眠 (常驻阻止 Windows 睡眠)";
+            _chkKeepAlive.Text = "保持系统防休眠 (常驻阻止 Windows 睡眠挂起)";
             _chkKeepAlive.AutoSize = true;
             _chkKeepAlive.Font = new Font("Microsoft YaHei UI", 9.0f);
             _chkKeepAlive.ForeColor = Color.FromArgb(209, 213, 219);
-            _chkKeepAlive.Margin = new Padding(0, 4, 0, 0);
+            _chkKeepAlive.Margin = new Padding(0, S(4), 0, 0);
             _chkKeepAlive.CheckedChanged += delegate
             {
                 PowerManager.SetKeepAlive(_chkKeepAlive.Checked);
@@ -344,7 +374,7 @@ namespace AgentScreenGuard
             FlowLayoutPanel row2 = new FlowLayoutPanel();
             row2.Dock = DockStyle.Fill;
             row2.WrapContents = false;
-            row2.Padding = new Padding(0, 6, 0, 0);
+            row2.Padding = new Padding(0, S(4), 0, 0);
 
             _chkMinToTray = new CheckBox();
             _chkMinToTray.Text = "关闭时最小化到系统托盘";
@@ -352,7 +382,7 @@ namespace AgentScreenGuard
             _chkMinToTray.AutoSize = true;
             _chkMinToTray.Font = new Font("Microsoft YaHei UI", 9.0f);
             _chkMinToTray.ForeColor = Color.FromArgb(156, 163, 175);
-            _chkMinToTray.Margin = new Padding(0, 6, 24, 0);
+            _chkMinToTray.Margin = new Padding(0, S(6), S(24), 0);
             row2.Controls.Add(_chkMinToTray);
 
             _chkAutoStart = new CheckBox();
@@ -361,7 +391,7 @@ namespace AgentScreenGuard
             _chkAutoStart.AutoSize = true;
             _chkAutoStart.Font = new Font("Microsoft YaHei UI", 9.0f);
             _chkAutoStart.ForeColor = Color.FromArgb(156, 163, 175);
-            _chkAutoStart.Margin = new Padding(0, 6, 24, 0);
+            _chkAutoStart.Margin = new Padding(0, S(6), S(24), 0);
             _chkAutoStart.CheckedChanged += delegate
             {
                 SetAutoStart(_chkAutoStart.Checked);
@@ -370,13 +400,13 @@ namespace AgentScreenGuard
 
             Button btnDiag = new Button();
             btnDiag.Text = "待机策略诊断";
-            btnDiag.Size = new Size(125, 30);
+            btnDiag.Size = new Size(S(135), S(30));
             btnDiag.FlatStyle = FlatStyle.Flat;
             btnDiag.FlatAppearance.BorderColor = Color.FromArgb(75, 85, 99);
             btnDiag.BackColor = Color.FromArgb(34, 36, 44);
             btnDiag.ForeColor = Color.FromArgb(209, 213, 219);
             btnDiag.Font = new Font("Microsoft YaHei UI", 8.75f);
-            btnDiag.Margin = new Padding(16, 2, 0, 0);
+            btnDiag.Margin = new Padding(S(16), S(2), 0, 0);
             btnDiag.Cursor = Cursors.Hand;
             btnDiag.Click += delegate { ShowDiagnostics(); };
             row2.Controls.Add(btnDiag);

@@ -15,6 +15,7 @@ namespace AgentScreenGuard
     public class BlackMaskForm : Form
     {
         private static BlackMaskForm _currentInstance = null;
+        private bool _isCursorHidden = false;
 
         public BlackMaskForm()
         {
@@ -25,17 +26,8 @@ namespace AgentScreenGuard
             this.ShowInTaskbar = false;
             this.StartPosition = FormStartPosition.Manual;
 
-            // 计算跨多显示器的联合虚拟屏幕尺寸
-            int minX = int.MaxValue, minY = int.MaxValue;
-            int maxX = int.MinValue, maxY = int.MinValue;
-            foreach (Screen screen in Screen.AllScreens)
-            {
-                if (screen.Bounds.X < minX) minX = screen.Bounds.X;
-                if (screen.Bounds.Y < minY) minY = screen.Bounds.Y;
-                if (screen.Bounds.Right > maxX) maxX = screen.Bounds.Right;
-                if (screen.Bounds.Bottom > maxY) maxY = screen.Bounds.Bottom;
-            }
-            this.Bounds = new Rectangle(minX, minY, maxX - minX, maxY - minY);
+            // 跨多显示器联合虚拟屏幕覆盖
+            this.Bounds = SystemInformation.VirtualScreen;
 
             this.KeyPreview = true;
             this.KeyDown += new KeyEventHandler(OnKeyDownHandler);
@@ -57,20 +49,33 @@ namespace AgentScreenGuard
 
         private void ExitMask()
         {
-            Cursor.Show();
+            RestoreCursor();
             this.Close();
         }
 
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
-            Cursor.Hide();
+            if (!_isCursorHidden)
+            {
+                Cursor.Hide();
+                _isCursorHidden = true;
+            }
+        }
+
+        private void RestoreCursor()
+        {
+            if (_isCursorHidden)
+            {
+                Cursor.Show();
+                _isCursorHidden = false;
+            }
         }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             base.OnFormClosed(e);
-            Cursor.Show();
+            RestoreCursor();
             _currentInstance = null;
         }
 

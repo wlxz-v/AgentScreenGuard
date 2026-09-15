@@ -46,6 +46,11 @@ namespace AgentScreenGuard
         public const int VK_LBUTTON = 0x01;
         public const int VK_RBUTTON = 0x02;
         public const int VK_MBUTTON = 0x04;
+        public const int VK_SHIFT = 0x10;
+        public const int VK_CONTROL = 0x11;
+        public const int VK_MENU = 0x12; // Alt key
+        public const int VK_S = 0x53;
+        public const int VK_B = 0x42;
 
         public const uint MOD_ALT = 0x0001;
         public const uint MOD_CONTROL = 0x0002;
@@ -67,18 +72,25 @@ namespace AgentScreenGuard
         // -------------------------------------------------------------
 
         /// <summary>
-        /// 等待物理按键释放，并延时指定毫秒数
+        /// 等待物理输入（鼠标按键及快捷键按键）释放，并延时指定毫秒数
+        /// 防止按键弹起事件被 Windows 误判为用户活动从而瞬间唤醒屏幕
         /// </summary>
         public static void WaitInputRelease(int delayMs)
         {
             int start = Environment.TickCount;
-            // 轮询等待鼠标按键全部释放（防抖 1500ms 保护）
-            while (Environment.TickCount - start < 1500)
+            // 轮询等待鼠标按键与常用热键按键全部物理释放（防抖 2000ms 保护）
+            while (Environment.TickCount - start < 2000)
             {
                 bool leftDown = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
                 bool rightDown = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
                 bool midDown = (GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
-                if (!leftDown && !rightDown && !midDown)
+                bool ctrlDown = (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+                bool altDown = (GetAsyncKeyState(VK_MENU) & 0x8000) != 0;
+                bool shiftDown = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+                bool sDown = (GetAsyncKeyState(VK_S) & 0x8000) != 0;
+                bool bDown = (GetAsyncKeyState(VK_B) & 0x8000) != 0;
+
+                if (!leftDown && !rightDown && !midDown && !ctrlDown && !altDown && !shiftDown && !sDown && !bDown)
                 {
                     break;
                 }
