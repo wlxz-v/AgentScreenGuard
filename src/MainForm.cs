@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
@@ -18,9 +18,9 @@ namespace AgentScreenGuard
         [DllImport("user32.dll")]
         private static extern uint GetDpiForSystem();
 
-        // 紧凑设计尺寸 (宽度 430px，高度 268px，无多余空白，高度完全匹配内容)
+        // 紧凑设计基准尺寸 (宽度 430px，高度 248px，完全杜绝大面积空白与重叠)
         private const int BaseWidth = 430;
-        private const int BaseHeight = 268;
+        private const int BaseHeight = 248;
 
         private float _dpiScale = 1.0f;
         public int S(int pixel96) { return (int)Math.Round(pixel96 * _dpiScale); }
@@ -54,7 +54,7 @@ namespace AgentScreenGuard
             if (dpi == 0) dpi = 96;
             _dpiScale = (float)dpi / 96.0f;
 
-            // 2. 窗口形态：紧凑小巧，边距紧凑，高度完全匹配内容
+            // 2. 窗口形态：绝对匹配内容的高密度紧凑工具
             this.Text = "AgentScreenGuard";
             this.ClientSize = new Size(S(BaseWidth), S(BaseHeight));
             this.FormBorderStyle = FormBorderStyle.FixedSingle;
@@ -64,7 +64,7 @@ namespace AgentScreenGuard
             this.ForeColor = Color.FromArgb(240, 240, 245);
             this.Font = new Font("Microsoft YaHei UI", 9.0f, FontStyle.Regular);
 
-            // 3. 构建精简界面
+            // 3. 构建无重叠精准像素布局
             InitializeLayout();
             InitializeTrayIcon();
             RegisterGlobalHotkeys();
@@ -78,25 +78,26 @@ namespace AgentScreenGuard
         }
 
         // =============================================================
-        // 核心布局构造 (高度与内容紧密贴合，零空白浪费)
+        // 核心布局构造 (绝对像素对齐，零多余空白，零控件重叠)
         // =============================================================
         private void InitializeLayout()
         {
-            // 初始化悬停提示工具
+            int W = this.ClientSize.Width;
+
+            // 悬停技术说明浮窗
             _infoToolTip = new ToolTip();
             _infoToolTip.AutoPopDelay = 12000;
-            _infoToolTip.InitialDelay = 200;
+            _infoToolTip.InitialDelay = 150;
             _infoToolTip.ReshowDelay = 100;
             _infoToolTip.ShowAlways = true;
 
             // ---------------------------------------------------------
-            // 1. 顶部极简标题栏 (高度 S(34))
+            // 1. 顶部标题栏 (高度 S(32))
             // ---------------------------------------------------------
             Panel headerPanel = new Panel();
-            headerPanel.Dock = DockStyle.Top;
-            headerPanel.Height = S(34);
+            headerPanel.Location = new Point(0, 0);
+            headerPanel.Size = new Size(W, S(32));
             headerPanel.BackColor = Color.FromArgb(24, 25, 32);
-            headerPanel.Padding = new Padding(S(12), 0, S(12), 0);
             headerPanel.Paint += delegate(object s, PaintEventArgs e)
             {
                 e.Graphics.DrawLine(new Pen(Color.FromArgb(38, 40, 52)), 0, headerPanel.Height - 1, headerPanel.Width, headerPanel.Height - 1);
@@ -106,206 +107,42 @@ namespace AgentScreenGuard
             lblTitle.Text = "AgentScreenGuard";
             lblTitle.Font = new Font("Microsoft YaHei UI", 10.0f, FontStyle.Bold);
             lblTitle.ForeColor = Color.White;
-            lblTitle.Dock = DockStyle.Left;
             lblTitle.AutoSize = true;
-            lblTitle.TextAlign = ContentAlignment.MiddleLeft;
+            lblTitle.Location = new Point(S(12), S(7));
+            headerPanel.Controls.Add(lblTitle);
 
             Label lblVer = new Label();
             lblVer.Text = "屏幕防烧屏与保活 (v1.0)";
             lblVer.Font = new Font("Microsoft YaHei UI", 8.0f, FontStyle.Regular);
             lblVer.ForeColor = Color.FromArgb(140, 145, 158);
-            lblVer.Dock = DockStyle.Right;
             lblVer.AutoSize = true;
-            lblVer.TextAlign = ContentAlignment.MiddleRight;
-
+            lblVer.Location = new Point(W - S(140), S(9));
             headerPanel.Controls.Add(lblVer);
-            headerPanel.Controls.Add(lblTitle);
-            headerPanel.Resize += delegate
-            {
-                lblTitle.Top = (headerPanel.ClientSize.Height - lblTitle.Height) / 2;
-                lblVer.Top = (headerPanel.ClientSize.Height - lblVer.Height) / 2;
-            };
 
             this.Controls.Add(headerPanel);
 
             // ---------------------------------------------------------
-            // 2. 底部状态栏 (高度 S(22))
+            // 2. 中间 4 个模式卡片 (每行精准高 S(27)，行间距 S(3)，完全紧贴文字与按钮)
             // ---------------------------------------------------------
-            Panel bottomStatusBar = new Panel();
-            bottomStatusBar.Dock = DockStyle.Bottom;
-            bottomStatusBar.Height = S(22);
-            bottomStatusBar.BackColor = Color.FromArgb(16, 17, 22);
-            bottomStatusBar.Padding = new Padding(S(12), 0, S(12), 0);
-            bottomStatusBar.Paint += delegate(object s, PaintEventArgs e)
-            {
-                e.Graphics.DrawLine(new Pen(Color.FromArgb(32, 34, 44)), 0, 0, bottomStatusBar.Width, 0);
-            };
-
-            _lblStatusPower = new Label();
-            _lblStatusPower.Text = "⚡ 交流电源 (已插电)";
-            _lblStatusPower.Font = new Font("Microsoft YaHei UI", 8.0f, FontStyle.Regular);
-            _lblStatusPower.ForeColor = Color.FromArgb(56, 189, 248);
-            _lblStatusPower.Dock = DockStyle.Left;
-            _lblStatusPower.AutoSize = true;
-            _lblStatusPower.TextAlign = ContentAlignment.MiddleLeft;
-
-            _lblStatusGuard = new Label();
-            _lblStatusGuard.Text = "🛡️ 保活: 未激活";
-            _lblStatusGuard.Font = new Font("Microsoft YaHei UI", 8.0f, FontStyle.Regular);
-            _lblStatusGuard.ForeColor = Color.FromArgb(140, 145, 158);
-            _lblStatusGuard.Dock = DockStyle.Right;
-            _lblStatusGuard.AutoSize = true;
-            _lblStatusGuard.TextAlign = ContentAlignment.MiddleRight;
-
-            bottomStatusBar.Controls.Add(_lblStatusGuard);
-            bottomStatusBar.Controls.Add(_lblStatusPower);
-            bottomStatusBar.Resize += delegate
-            {
-                _lblStatusPower.Top = (bottomStatusBar.ClientSize.Height - _lblStatusPower.Height) / 2;
-                _lblStatusGuard.Top = (bottomStatusBar.ClientSize.Height - _lblStatusGuard.Height) / 2;
-            };
-
-            this.Controls.Add(bottomStatusBar);
-
-            // ---------------------------------------------------------
-            // 3. 底部选择项 (双栏紧凑排版，高度 S(52))
-            // ---------------------------------------------------------
-            Panel settingsPanel = new Panel();
-            settingsPanel.Dock = DockStyle.Bottom;
-            settingsPanel.Height = S(52);
-            settingsPanel.BackColor = Color.FromArgb(22, 23, 29);
-            settingsPanel.Padding = new Padding(S(12), S(4), S(12), S(3));
-            settingsPanel.Paint += delegate(object s, PaintEventArgs e)
-            {
-                e.Graphics.DrawLine(new Pen(Color.FromArgb(32, 34, 44)), 0, 0, settingsPanel.Width, 0);
-            };
-
-            TableLayoutPanel settingsGrid = new TableLayoutPanel();
-            settingsGrid.Dock = DockStyle.Fill;
-            settingsGrid.ColumnCount = 2;
-            settingsGrid.RowCount = 2;
-            settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-            settingsGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
-            settingsGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
-
-            // 左栏第 1 行：延时配置
-            FlowLayoutPanel delayFlow = new FlowLayoutPanel();
-            delayFlow.Dock = DockStyle.Fill;
-            delayFlow.Margin = new Padding(0);
-            delayFlow.WrapContents = false;
-
-            Label lblDelay = new Label();
-            lblDelay.Text = "延时:";
-            lblDelay.AutoSize = true;
-            lblDelay.Font = new Font("Microsoft YaHei UI", 8.25f);
-            lblDelay.ForeColor = Color.FromArgb(200, 205, 215);
-            lblDelay.Margin = new Padding(0, S(3), S(3), 0);
-            delayFlow.Controls.Add(lblDelay);
-
-            _cboDelay = new ComboBox();
-            _cboDelay.DropDownStyle = ComboBoxStyle.DropDownList;
-            _cboDelay.Items.AddRange(new object[] { "500 ms", "800 ms", "1000 ms (推荐)", "1500 ms", "2000 ms" });
-            _cboDelay.SelectedIndex = 2;
-            _cboDelay.Size = new Size(S(115), S(21));
-            _cboDelay.Font = new Font("Microsoft YaHei UI", 8.25f);
-            _cboDelay.BackColor = Color.FromArgb(34, 36, 44);
-            _cboDelay.ForeColor = Color.White;
-            _cboDelay.Margin = new Padding(0);
-            delayFlow.Controls.Add(_cboDelay);
-
-            settingsGrid.Controls.Add(delayFlow, 0, 0);
-
-            // 右栏第 1 行：常驻阻止休眠
-            _chkKeepAlive = new CheckBox();
-            _chkKeepAlive.Text = "保持常驻防休眠";
-            _chkKeepAlive.AutoSize = true;
-            _chkKeepAlive.Font = new Font("Microsoft YaHei UI", 8.25f);
-            _chkKeepAlive.ForeColor = Color.FromArgb(200, 205, 215);
-            _chkKeepAlive.Margin = new Padding(0, S(2), 0, 0);
-            _chkKeepAlive.CheckedChanged += delegate
-            {
-                PowerManager.SetKeepAlive(_chkKeepAlive.Checked);
-                UpdatePowerStatusDisplay();
-            };
-            settingsGrid.Controls.Add(_chkKeepAlive, 1, 0);
-
-            // 左栏第 2 行：最小化到系统托盘
-            _chkMinToTray = new CheckBox();
-            _chkMinToTray.Text = "关闭时最小化到托盘";
-            _chkMinToTray.Checked = true;
-            _chkMinToTray.AutoSize = true;
-            _chkMinToTray.Font = new Font("Microsoft YaHei UI", 8.25f);
-            _chkMinToTray.ForeColor = Color.FromArgb(140, 145, 158);
-            _chkMinToTray.Margin = new Padding(0, S(1), 0, 0);
-            settingsGrid.Controls.Add(_chkMinToTray, 0, 1);
-
-            // 右栏第 2 行：开机自启 + 诊断小按钮
-            FlowLayoutPanel autoStartFlow = new FlowLayoutPanel();
-            autoStartFlow.Dock = DockStyle.Fill;
-            autoStartFlow.Margin = new Padding(0);
-            autoStartFlow.WrapContents = false;
-
-            _chkAutoStart = new CheckBox();
-            _chkAutoStart.Text = "开机随系统启动";
-            _chkAutoStart.Checked = CheckIsAutoStart();
-            _chkAutoStart.AutoSize = true;
-            _chkAutoStart.Font = new Font("Microsoft YaHei UI", 8.25f);
-            _chkAutoStart.ForeColor = Color.FromArgb(140, 145, 158);
-            _chkAutoStart.Margin = new Padding(0, S(1), S(6), 0);
-            _chkAutoStart.CheckedChanged += delegate
-            {
-                SetAutoStart(_chkAutoStart.Checked);
-            };
-            autoStartFlow.Controls.Add(_chkAutoStart);
-
-            Button btnDiag = new Button();
-            btnDiag.Text = "诊断";
-            btnDiag.Size = new Size(S(42), S(19));
-            btnDiag.FlatStyle = FlatStyle.Flat;
-            btnDiag.FlatAppearance.BorderColor = Color.FromArgb(55, 60, 72);
-            btnDiag.BackColor = Color.FromArgb(34, 36, 44);
-            btnDiag.ForeColor = Color.FromArgb(170, 175, 185);
-            btnDiag.Font = new Font("Microsoft YaHei UI", 7.5f);
-            btnDiag.Margin = new Padding(0);
-            btnDiag.Cursor = Cursors.Hand;
-            btnDiag.Click += delegate { ShowDiagnostics(); };
-            autoStartFlow.Controls.Add(btnDiag);
-
-            settingsGrid.Controls.Add(autoStartFlow, 1, 1);
-
-            settingsPanel.Controls.Add(settingsGrid);
-            this.Controls.Add(settingsPanel);
-
-            // ---------------------------------------------------------
-            // 4. 中间模式卡片区 (4行紧凑布局，每个模式高度精准贴合)
-            // ---------------------------------------------------------
-            Panel mainContainer = new Panel();
-            mainContainer.Dock = DockStyle.Fill;
-            mainContainer.Padding = new Padding(S(10), S(6), S(10), S(4));
-
-            TableLayoutPanel modesGrid = new TableLayoutPanel();
-            modesGrid.Dock = DockStyle.Fill;
-            modesGrid.ColumnCount = 1;
-            modesGrid.RowCount = 4;
-            modesGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            modesGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 25f));
-            modesGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 25f));
-            modesGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 25f));
-            modesGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 25f));
+            int startY = S(36);
+            int rowH = S(27);
+            int rowGap = S(3);
+            int rowW = W - S(20);
 
             // 模式 1: 一键即时熄屏
-            modesGrid.Controls.Add(CreateModeRow(
+            this.Controls.Add(CreateModeRow(
+                S(10), startY + 0 * (rowH + rowGap), rowW, rowH,
                 "⚡ 一键即时熄屏",
                 "[Ctrl+Alt+S]",
-                "【一键即时熄屏实现机理】\n底层通过广播发送 SC_MONITORPOWER 消息，指示 GPU 硬件关断显示链路 (DPMS D3)。\n• OLED: 各像素有机发光直接归零 (0.0000 nit)，整屏物理熄灭。\n• LCD: 液晶面板背光完全切断供电。\n• 唤醒方式: 晃动鼠标或敲击任意键盘按键即刻唤醒。\n• 具备微秒级按键防抖，避免松手弹起瞬间误唤醒。",
+                "【一键即时熄屏实现机理】\n底层通过广播发送 SC_MONITORPOWER 消息，指示 GPU 硬件关断显示链路 (DPMS D3)。\n• OLED: 各像素有机发光直接归零 (0.0000 nit)，整屏物理熄灭。\n• LCD: 液晶面板背光完全切断供电。\n• 唤醒方式: 晃动鼠标或敲击键盘任意按键即刻唤醒。\n• 具备微秒级按键防抖，避免松手弹起瞬间误唤醒。",
                 Color.FromArgb(56, 189, 248),
                 Color.FromArgb(2, 132, 199),
                 delegate { ExecuteScreenOff(); }
-            ), 0, 0);
+            ));
 
             // 模式 2: Agent 守护保活 (防休眠)
-            modesGrid.Controls.Add(CreateModeRow(
+            this.Controls.Add(CreateModeRow(
+                S(10), startY + 1 * (rowH + rowGap), rowW, rowH,
                 "🛡️ Agent 守护保活",
                 "[离开模式防休眠]",
                 "【Agent 守护保活实现机理】\n调用底层 Win32 内核 API SetThreadExecutionState，注入系统保活锁：\n(ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED)。\n• 强力阻止 Windows 进入 Modern Standby (S0ix) 或睡眠休眠挂起。\n• 屏幕硬件可完全熄灭切断显示，但 CPU、内存与网络保持全速运转，长夜通宵任务不断线。",
@@ -318,104 +155,220 @@ namespace AgentScreenGuard
                     UpdatePowerStatusDisplay();
                     ExecuteScreenOff();
                 }
-            ), 0, 1);
+            ));
 
             // 模式 3: 锁定工作站并熄屏
-            modesGrid.Controls.Add(CreateModeRow(
+            this.Controls.Add(CreateModeRow(
+                S(10), startY + 2 * (rowH + rowGap), rowW, rowH,
                 "🔒 锁定工作站并熄屏",
                 "[Win+L 锁屏]",
                 "【锁定工作站并熄屏实现机理】\n先执行 Win32 API LockWorkStation() 锁定当前 Windows 桌面，随后硬件切断显示信号。\n• 适用于离开工位、外出防窥且需要后台长任务持续运转的场景。\n• 点亮屏幕后需输入 Windows 账户密码方可进入桌面。",
                 Color.FromArgb(167, 139, 250),
                 Color.FromArgb(109, 40, 217),
                 delegate { ExecuteLockAndTurnOff(); }
-            ), 0, 2);
+            ));
 
             // 模式 4: OLED 纯黑置顶幕布
-            modesGrid.Controls.Add(CreateModeRow(
+            this.Controls.Add(CreateModeRow(
+                S(10), startY + 3 * (rowH + rowGap), rowW, rowH,
                 "⬛ OLED 纯黑置顶幕布",
                 "[Ctrl+Alt+B]",
                 "【OLED 纯黑置顶幕布实现机理】\n跨多屏幕覆盖无边框顶级全黑窗体 (#000000)。\n• OLED 像素纯黑不发光防烧屏，且不切断 GPU 显示链路。\n• 显存帧缓冲区与分辨率完好保留，彻底避免 pyautogui / CV 视觉自动化截取黑帧。\n• 按 Esc 键或鼠标点击即可秒速退出。",
                 Color.FromArgb(251, 191, 36),
                 Color.FromArgb(217, 119, 6),
                 delegate { BlackMaskForm.ShowMask(); }
-            ), 0, 3);
+            ));
 
-            mainContainer.Controls.Add(modesGrid);
-            this.Controls.Add(mainContainer);
+            // ---------------------------------------------------------
+            // 3. 底部选择项面板 (双栏紧凑排布，高度 S(52))
+            // ---------------------------------------------------------
+            int settingsY = startY + 4 * (rowH + rowGap) + S(3);
+            Panel settingsPanel = new Panel();
+            settingsPanel.Location = new Point(0, settingsY);
+            settingsPanel.Size = new Size(W, S(52));
+            settingsPanel.BackColor = Color.FromArgb(22, 23, 29);
+            settingsPanel.Paint += delegate(object s, PaintEventArgs e)
+            {
+                e.Graphics.DrawLine(new Pen(Color.FromArgb(32, 34, 44)), 0, 0, settingsPanel.Width, 0);
+            };
+
+            int leftColX = S(12);
+            int rightColX = W / 2 + S(4);
+
+            // 左栏第 1 行：延时
+            Label lblDelay = new Label();
+            lblDelay.Text = "延时:";
+            lblDelay.AutoSize = true;
+            lblDelay.Font = new Font("Microsoft YaHei UI", 8.25f);
+            lblDelay.ForeColor = Color.FromArgb(200, 205, 215);
+            lblDelay.Location = new Point(leftColX, S(6));
+            settingsPanel.Controls.Add(lblDelay);
+
+            _cboDelay = new ComboBox();
+            _cboDelay.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cboDelay.Items.AddRange(new object[] { "500 ms", "800 ms", "1000 ms (推荐)", "1500 ms", "2000 ms" });
+            _cboDelay.SelectedIndex = 2;
+            _cboDelay.Size = new Size(S(115), S(21));
+            _cboDelay.Font = new Font("Microsoft YaHei UI", 8.25f);
+            _cboDelay.BackColor = Color.FromArgb(34, 36, 44);
+            _cboDelay.ForeColor = Color.White;
+            _cboDelay.Location = new Point(leftColX + S(36), S(3));
+            settingsPanel.Controls.Add(_cboDelay);
+
+            // 右栏第 1 行：保持常驻防休眠
+            _chkKeepAlive = new CheckBox();
+            _chkKeepAlive.Text = "保持系统常驻防休眠";
+            _chkKeepAlive.AutoSize = true;
+            _chkKeepAlive.Font = new Font("Microsoft YaHei UI", 8.25f);
+            _chkKeepAlive.ForeColor = Color.FromArgb(200, 205, 215);
+            _chkKeepAlive.Location = new Point(rightColX, S(5));
+            _chkKeepAlive.CheckedChanged += delegate
+            {
+                PowerManager.SetKeepAlive(_chkKeepAlive.Checked);
+                UpdatePowerStatusDisplay();
+            };
+            settingsPanel.Controls.Add(_chkKeepAlive);
+
+            // 左栏第 2 行：最小化到托盘
+            _chkMinToTray = new CheckBox();
+            _chkMinToTray.Text = "关闭时最小化到托盘";
+            _chkMinToTray.Checked = true;
+            _chkMinToTray.AutoSize = true;
+            _chkMinToTray.Font = new Font("Microsoft YaHei UI", 8.25f);
+            _chkMinToTray.ForeColor = Color.FromArgb(140, 145, 158);
+            _chkMinToTray.Location = new Point(leftColX, S(28));
+            settingsPanel.Controls.Add(_chkMinToTray);
+
+            // 右栏第 2 行：开机自启 + 诊断
+            _chkAutoStart = new CheckBox();
+            _chkAutoStart.Text = "开机随系统启动";
+            _chkAutoStart.Checked = CheckIsAutoStart();
+            _chkAutoStart.AutoSize = true;
+            _chkAutoStart.Font = new Font("Microsoft YaHei UI", 8.25f);
+            _chkAutoStart.ForeColor = Color.FromArgb(140, 145, 158);
+            _chkAutoStart.Location = new Point(rightColX, S(28));
+            _chkAutoStart.CheckedChanged += delegate
+            {
+                SetAutoStart(_chkAutoStart.Checked);
+            };
+            settingsPanel.Controls.Add(_chkAutoStart);
+
+            Button btnDiag = new Button();
+            btnDiag.Text = "诊断";
+            btnDiag.Size = new Size(S(42), S(19));
+            btnDiag.FlatStyle = FlatStyle.Flat;
+            btnDiag.FlatAppearance.BorderColor = Color.FromArgb(55, 60, 72);
+            btnDiag.BackColor = Color.FromArgb(34, 36, 44);
+            btnDiag.ForeColor = Color.FromArgb(170, 175, 185);
+            btnDiag.Font = new Font("Microsoft YaHei UI", 7.5f);
+            btnDiag.Cursor = Cursors.Hand;
+            btnDiag.Location = new Point(rightColX + S(114), S(27));
+            btnDiag.Click += delegate { ShowDiagnostics(); };
+            settingsPanel.Controls.Add(btnDiag);
+
+            this.Controls.Add(settingsPanel);
+
+            // ---------------------------------------------------------
+            // 4. 底部系统状态栏 (高度 S(21))
+            // ---------------------------------------------------------
+            int statusY = settingsY + S(52);
+            Panel bottomStatusBar = new Panel();
+            bottomStatusBar.Location = new Point(0, statusY);
+            bottomStatusBar.Size = new Size(W, S(21));
+            bottomStatusBar.BackColor = Color.FromArgb(16, 17, 22);
+            bottomStatusBar.Paint += delegate(object s, PaintEventArgs e)
+            {
+                e.Graphics.DrawLine(new Pen(Color.FromArgb(30, 32, 42)), 0, 0, bottomStatusBar.Width, 0);
+            };
+
+            _lblStatusPower = new Label();
+            _lblStatusPower.Text = "⚡ 交流电源 (已插电)";
+            _lblStatusPower.Font = new Font("Microsoft YaHei UI", 8.0f, FontStyle.Regular);
+            _lblStatusPower.ForeColor = Color.FromArgb(56, 189, 248);
+            _lblStatusPower.AutoSize = true;
+            _lblStatusPower.Location = new Point(S(12), S(2));
+            bottomStatusBar.Controls.Add(_lblStatusPower);
+
+            _lblStatusGuard = new Label();
+            _lblStatusGuard.Text = "🛡️ 保活: 未激活";
+            _lblStatusGuard.Font = new Font("Microsoft YaHei UI", 8.0f, FontStyle.Regular);
+            _lblStatusGuard.ForeColor = Color.FromArgb(140, 145, 158);
+            _lblStatusGuard.AutoSize = true;
+            _lblStatusGuard.Location = new Point(W - S(105), S(2));
+            bottomStatusBar.Controls.Add(_lblStatusGuard);
+
+            this.Controls.Add(bottomStatusBar);
+
+            // 保证窗体客户端高度刚好包住状态栏底部
+            this.ClientSize = new Size(W, statusY + S(21));
         }
 
         // =============================================================
-        // 单个模式行组件 (高度紧密贴合文字内容，悬停图标提示技术机理)
+        // 单个模式行组件 (高度完全匹配文字内容，悬停图标展示实现方式)
         // =============================================================
-        private Panel CreateModeRow(string title, string shortcutHint, string tooltipDetail, Color titleColor, Color btnColor, EventHandler onAction)
+        private Panel CreateModeRow(int x, int y, int width, int height,
+            string title, string shortcutHint, string tooltipDetail, Color titleColor, Color btnColor, EventHandler onAction)
         {
             Panel row = new Panel();
-            row.Dock = DockStyle.Fill;
-            row.Margin = new Padding(0, S(2), 0, S(2));
+            row.Location = new Point(x, y);
+            row.Size = new Size(width, height);
             row.BackColor = Color.FromArgb(25, 26, 33);
-            row.Padding = new Padding(S(10), 0, S(8), 0);
             row.Paint += delegate(object s, PaintEventArgs e)
             {
                 ControlPaint.DrawBorder(e.Graphics, row.ClientRectangle, Color.FromArgb(36, 38, 48), ButtonBorderStyle.Solid);
             };
 
-            // 标题
+            // 标题 (精确测量像素宽度，绝无重叠截断)
             Label lblTitle = new Label();
             lblTitle.Text = title;
-            lblTitle.Font = new Font("Microsoft YaHei UI", 9.0f, FontStyle.Bold);
+            lblTitle.Font = new Font("Microsoft YaHei UI", 8.75f, FontStyle.Bold);
             lblTitle.ForeColor = titleColor;
-            lblTitle.AutoSize = true;
+            Size titleSize = TextRenderer.MeasureText(title, lblTitle.Font);
+            lblTitle.Size = titleSize;
+            lblTitle.Location = new Point(S(8), Math.Max(0, (height - titleSize.Height) / 2));
 
-            // 快捷键标签
+            // 快捷键标签 (紧随标题之后，动态精确排布)
             Label lblHint = new Label();
             lblHint.Text = shortcutHint;
             lblHint.Font = new Font("Microsoft YaHei UI", 7.75f, FontStyle.Regular);
             lblHint.ForeColor = Color.FromArgb(120, 125, 138);
-            lblHint.AutoSize = true;
+            Size hintSize = TextRenderer.MeasureText(shortcutHint, lblHint.Font);
+            lblHint.Size = hintSize;
+            lblHint.Location = new Point(lblTitle.Right + S(6), Math.Max(0, (height - hintSize.Height) / 2));
 
-            // 悬停信息图标 (鼠标移到此处展示实现方式)
+            // 悬停信息图标 (紧随标签之后)
             Label lblInfo = new Label();
             lblInfo.Text = "ⓘ";
-            lblInfo.Font = new Font("Microsoft YaHei UI", 8.25f, FontStyle.Bold);
-            lblInfo.ForeColor = Color.FromArgb(130, 135, 150);
-            lblInfo.AutoSize = true;
+            lblInfo.Font = new Font("Microsoft YaHei UI", 8.0f, FontStyle.Bold);
+            lblInfo.ForeColor = Color.FromArgb(125, 130, 145);
+            Size infoSize = TextRenderer.MeasureText("ⓘ", lblInfo.Font);
+            lblInfo.Size = infoSize;
             lblInfo.Cursor = Cursors.Help;
+            lblInfo.Location = new Point(lblHint.Right + S(4), Math.Max(0, (height - infoSize.Height) / 2));
 
             lblInfo.MouseEnter += delegate { lblInfo.ForeColor = Color.FromArgb(56, 189, 248); };
-            lblInfo.MouseLeave += delegate { lblInfo.ForeColor = Color.FromArgb(130, 135, 150); };
+            lblInfo.MouseLeave += delegate { lblInfo.ForeColor = Color.FromArgb(125, 130, 145); };
 
-            // 绑定悬停介绍
             _infoToolTip.SetToolTip(lblInfo, tooltipDetail);
             _infoToolTip.SetToolTip(lblTitle, tooltipDetail);
 
-            // 右侧统一“启动”按钮 (尺寸紧凑精致)
+            // 右侧统一“启动”按钮
             Button btnStart = new Button();
             btnStart.Text = "启动";
-            btnStart.Size = new Size(S(58), S(24));
+            btnStart.Size = new Size(S(54), S(21));
             btnStart.FlatStyle = FlatStyle.Flat;
             btnStart.FlatAppearance.BorderSize = 0;
             btnStart.BackColor = btnColor;
             btnStart.ForeColor = Color.White;
-            btnStart.Font = new Font("Microsoft YaHei UI", 8.5f, FontStyle.Bold);
+            btnStart.Font = new Font("Microsoft YaHei UI", 8.25f, FontStyle.Bold);
             btnStart.Cursor = Cursors.Hand;
+            btnStart.Location = new Point(width - btnStart.Width - S(4), Math.Max(0, (height - btnStart.Height) / 2));
             btnStart.Click += onAction;
 
             row.Controls.Add(lblTitle);
             row.Controls.Add(lblHint);
             row.Controls.Add(lblInfo);
             row.Controls.Add(btnStart);
-
-            // 精准垂直居中排布，杜绝任何空白位移
-            row.Resize += delegate
-            {
-                int midY = row.ClientSize.Height / 2;
-
-                lblTitle.Location = new Point(S(10), Math.Max(0, midY - (lblTitle.Height / 2)));
-                lblHint.Location = new Point(lblTitle.Right + S(6), Math.Max(0, midY - (lblHint.Height / 2)));
-                lblInfo.Location = new Point(lblHint.Right + S(4), Math.Max(0, midY - (lblInfo.Height / 2)));
-
-                btnStart.Location = new Point(row.ClientSize.Width - btnStart.Width - S(8), Math.Max(0, midY - (btnStart.Height / 2)));
-            };
 
             return row;
         }
