@@ -894,8 +894,16 @@ namespace AgentScreenGuard
             _trayIcon = new NotifyIcon();
             _trayIcon.Text = "AgentScreenGuard (防烧屏 & 保活)";
             _trayIcon.ContextMenuStrip = _trayMenu;
-            _trayIcon.Icon = GenerateTrayIcon();
-            this.Icon = _trayIcon.Icon;
+            Icon appIcon = null;
+            try
+            {
+                appIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            }
+            catch { }
+            if (appIcon == null) appIcon = GenerateTrayIcon();
+
+            _trayIcon.Icon = appIcon;
+            this.Icon = appIcon;
             _trayIcon.Visible = true;
             _trayIcon.DoubleClick += delegate { RestoreWindow(); };
         }
