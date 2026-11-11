@@ -1,14 +1,14 @@
 @echo off
 setlocal enabledelayedexpansion
 chcp 65001 >nul
-title AgentScreenGuard æ„å»ºè„šæœ¬
+title AgentScreenGuard ¹¹½¨½Å±¾
 
 echo ==============================================================================
-echo                 AgentScreenGuard - çº¯åŸç”Ÿè½»é‡åŒ–æ„å»ºç³»ç»Ÿ
+echo                 AgentScreenGuard - ´¿Ô­ÉúÇáÁ¿»¯¹¹½¨ÏµÍ³
 echo ==============================================================================
 echo.
 
-:: æŸ¥æ‰¾ç³»ç»ŸåŸç”Ÿ C# ç¼–è¯‘å™¨ csc.exe
+:: ²éÕÒÏµÍ³Ô­Éú C# ±àÒëÆ÷ csc.exe
 set "CSC_EXE="
 if exist "%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" (
     set "CSC_EXE=%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
@@ -17,13 +17,13 @@ if exist "%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" (
 )
 
 if "%CSC_EXE%"=="" (
-    echo [!] é”™è¯¯: æœªåœ¨ç³»ç»Ÿä¸­æ£€æµ‹åˆ° .NET Framework 4.0+ ç¼–è¯‘å™¨ csc.exe
+    echo [!] ´íÎó: Î´ÔÚÏµÍ³ÖĞ¼ì²âµ½ .NET Framework 4.0+ ±àÒëÆ÷ csc.exe
     pause
     exit /b 1
 )
 
-echo [*] æ‰¾åˆ°åŸç”Ÿç¼–è¯‘å™¨: %CSC_EXE%
-echo [*] æ­£åœ¨å‡†å¤‡è¾“å‡ºç›®å½•...
+echo [*] ÕÒµ½Ô­Éú±àÒëÆ÷: %CSC_EXE%
+echo [*] ÕıÔÚ×¼±¸Êä³öÄ¿Â¼...
 if not exist "%~dp0bin" mkdir "%~dp0bin"
 
 set "OUT_EXE=%~dp0bin\AgentScreenGuard.exe"
@@ -33,18 +33,18 @@ set "MANIFEST=%SRC_DIR%\app.manifest"
 set "ICON_ARG="
 if exist "%SRC_DIR%\app.ico" set ICON_ARG=/win32icon:"%SRC_DIR%\app.ico"
 
-echo [*] æ­£åœ¨æ‰§è¡Œæ— ä¾èµ–é«˜ä¿çœŸç¼–è¯‘ (Per-Monitor V2 DPI, Target: Winexe)...
-"%CSC_EXE%" /nologo /codepage:65001 /utf8output /t:winexe /optimize+ /platform:anycpu /appconfig:"%SRC_DIR%\app.config" /win32manifest:"%MANIFEST%" %ICON_ARG% /out:"%OUT_EXE%" /r:System.dll,System.Windows.Forms.dll,System.Drawing.dll "%SRC_DIR%\*.cs"
+echo [*] ÕıÔÚÖ´ĞĞÎŞÒÀÀµ¸ß±£Õæ±àÒë (Per-Monitor V2 DPI, Target: Winexe)...
+"%CSC_EXE%" /nologo /codepage:65001 /utf8output /t:winexe /optimize+ /platform:anycpu /appconfig:"%SRC_DIR%\app.config" /win32manifest:"%MANIFEST%" %ICON_ARG% /out:"%OUT_EXE%" /r:System.dll,System.Windows.Forms.dll,System.Drawing.dll,System.Management.dll "%SRC_DIR%\*.cs"
 
 if %errorlevel% neq 0 (
-    echo [!] ç¼–è¯‘å¤±è´¥ï¼Œè¯·æ£€æŸ¥æºä»£ç è¯­æ³•æˆ–ä¾èµ–å¼•ç”¨ã€‚
+    echo [!] ±àÒëÊ§°Ü£¬Çë¼ì²éÔ´´úÂëÓï·¨»òÒÀÀµÒıÓÃ¡£
     pause
     exit /b %errorlevel%
 )
 
 echo.
-echo [âˆš] æ„å»ºæˆåŠŸ: %OUT_EXE%
-for %%I in ("%OUT_EXE%") do echo [*] äºŒè¿›åˆ¶æ–‡ä»¶å¤§å°: %%~zI å­—èŠ‚ - æè‡´è½»é‡
+echo [¡Ì] ¹¹½¨³É¹¦: %OUT_EXE%
+for %%I in ("%OUT_EXE%") do echo [*] ¶ş½øÖÆÎÄ¼ş´óĞ¡: %%~zI ×Ö½Ú - ¼«ÖÂÇáÁ¿
 echo ==============================================================================
-echo [âˆš] å…¨éƒ¨å®Œæˆï¼å¯ä»¥ç›´æ¥è¿è¡Œ bin\AgentScreenGuard.exe
+echo [¡Ì] È«²¿Íê³É£¡¿ÉÒÔÖ±½ÓÔËĞĞ bin\AgentScreenGuard.exe
 

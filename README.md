@@ -1,4 +1,4 @@
-# AgentScreenGuard (护屏卫士)
+﻿# AgentScreenGuard (护屏卫士)
 
 <div align="center">
 
@@ -34,14 +34,14 @@
 
 | 模式 | 快捷键 | 核心机理 | 适用场景 |
 | :--- | :---: | :--- | :--- |
-| **一键即时熄屏** | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd> | 发送底层 `SC_MONITORPOWER` 广播，驱动 GPU 切断显示链路（DPMS D3）。OLED 像素发光度直接归零（**0.0000 nit**），功耗近乎为零。内嵌按键物理防抖，鼠标轻晃即醒。 | 常规后台计算、本地 LLM 推理、终端编译等非 GUI 视觉任务。 |
-| **Agent 守护保活** | GUI 开关 | 调用底层内核 `SetThreadExecutionState` 注入 `ES_SYSTEM_REQUIRED \| ES_AWAYMODE_REQUIRED`。**强制阻止整机睡眠挂起**，CPU 与网络全速高负载运转，跨夜通宵任务不断线。 | 通宵大型 Agent 任务、长时间自动化测试、长时间文件同步。 |
-| **锁定并熄屏** | GUI 按钮 | 调用 Win32 `LockWorkStation()` (Win+L) 并同步执行硬件关屏。 | 离开工位、外出防窥且需要后台任务持续运转。 |
-| **OLED 纯黑置顶幕布** | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>B</kbd> | 覆盖跨屏幕的无边框顶层全黑窗体（#000000）。**OLED 子像素 100% 物理熄灭**，且显卡驱动显示链路不断开，完好保留帧缓冲区与分辨率。按 <kbd>Esc</kbd> 退出。 | 依赖屏幕截取（`pyautogui.screenshot()` / CV 视觉模型识别）的 GUI Agent。 |
+| **🌑 护屏保活 (屏黑·不休眠)** | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>G</kbd> | **推荐**。不向系统发任何"关屏"指令：把内置屏背光压到 0（WMI `WmiMonitorBrightnessMethods`，失败退化为 gamma 压暗）+ 跨屏纯黑置顶窗体，再挂三层保活（`PowerCreateRequest`/`PowerSetRequest`、后台线程每 10s 重申 `ES_SYSTEM_REQUIRED`、电源空闲超时临时归零）。系统始终认为屏幕开着 → 不会进入 Modern Standby，CPU/网络/Agent 全程满速。按 <kbd>Esc</kbd> 或双击退出并精确还原。 | **通宵 Agent、跨夜编译、Modern Standby (S0ix) 笔记本。** |
+| **⚡ 硬件熄屏 (DPMS)** | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd> | 广播 `SC_MONITORPOWER` 驱动 GPU 切断显示链路（DPMS D3），像素归零、背光断电。内嵌按键防抖，鼠标轻晃即醒。**⚠ 在无 S3 的 S0ix 平台上，该指令会被固件直接映射成"进入新型待机"，长任务会中断（本机三次实测命中）。** | 短暂离开、此刻没有长任务在跑的场合。 |
+| **🔒 锁定并熄屏** | GUI 按钮 | `LockWorkStation()` 锁屏后硬件关屏。 | 离开工位、外出防窥。同样受上面 S0ix 限制。 |
+| **⬛ 纯黑幕布 (不改背光)** | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>B</kbd> | 只覆盖全黑置顶层，不切显示链路、不调背光，帧缓冲与分辨率完好。按 <kbd>Esc</kbd> 或双击退出。 | 依赖 `pyautogui.screenshot()` / CV 识别的 GUI Agent。 |
 
 ### 2. 🪶 极致原生与轻量化 (Zero Bloatware)
 - **单文件仅 ~25 KB**：没有 Electron（动辄 150MB+）、没有 Python 打包膨胀（动辄 50MB+）、不需要安装任何运行时或 SDK。
-- **自由拖动缩放与动态布局适配 (Dynamic Auto-Scale)**：窗口支持自由拖拽边框缩放与最大化；内置 80%~200% 动态缩放滑块与 <kbd>Ctrl</kbd> + 滚轮平滑缩放；所有文字控件支持动态流式折行与像素测量，自适应容器滚动，彻底消除文字截断、空间挤压与大面积重叠。
+- **紧凑极简布局**：固定 430×248 像素基准窗（按 DPI 等比换算），绝对像素定位 + `TextRenderer.MeasureText` 实测文字宽度，每行高度精确匹配内容，无文字截断、无重叠、无大面积空白。
 - **Per-Monitor V2 高分屏适配**：内嵌高清 DPI 清单与 GDI+ 字体防泄漏缓存，在 2.5K/4K 等高分屏（如 125%、150% 缩放）下文本与边框极度锐利，绝无模糊拉伸。
 - **现代暗色主题 UI**：采用深色低刺激 OLED Dark 调色体系，直观呈现实时 AC/DC 供电状态与防休眠激活标志。
 - **系统托盘常驻**：支持双击托盘恢复、右键快捷菜单快速关屏、关屏防休眠切换，退出时自动平稳复原系统电源策略。
@@ -81,6 +81,26 @@ MONITOR_OFF: 2                               ES_SYSTEM_REQUIRED (0x00000001)
 
 ---
 
+## 🧪 平台实测结论：为什么"熄屏"和"不休眠"在本机不能兼得 (2026-11-11)
+
+测试机：MECHREVO WUJIE15X（AMD Radeon 780M，内置 BOE 2560×1600@120Hz，**无 S3，仅 Modern Standby S0ix**）。
+
+| 实验 | 手段 | 结果 |
+| :--- | :--- | :--- |
+| ① | `PowerSetRequest(SystemRequired / ExecutionRequired)` + 每 3s 重申 `ES_SYSTEM_REQUIRED` 心跳 | 熄屏瞬间心跳中断 **69 秒**，Kernel-Power **506** 进入新型待机 |
+| ② | `ES_CONTINUOUS｜ES_SYSTEM_REQUIRED｜ES_DISPLAY_REQUIRED`（0x80000003） | 熄屏即 506，同样被挂起 |
+| ③ | `ES_CONTINUOUS｜ES_SYSTEM_REQUIRED｜ES_AWAYMODE_REQUIRED`（0x80000041） | 熄屏即 506，同样被挂起 |
+| ④ | DDC/CI `GetVCPFeatureAndVCPFeatureReply`（VCP 0xD6/0x10/0x6F/0xDF） | 全部 `ok=False err=31`（`ERROR_GEN_FAILURE`），不支持显示器级硬关屏 |
+| ⑤ | 断开内置显示器（`SetDisplayConfig` 拓扑 / `DisplaySwitch /external`） | 单屏机不允许"零活动显示"，此路不通 |
+
+**结论**：该平台固件把"DPMS 硬件熄屏"直接映射为"进入 Modern Standby"，任何内核电源锁都拦不住。
+因此本工具默认走**假黑屏**：不关屏 → 系统永不判定屏幕关闭 → 整机不入待机；代价是 0% 背光下仍有面板自身的最小背光余辉（软件已到硬件下限，回读确认亮度真实为 0）。
+
+> 若需要"屏幕物理全灭 + 整机不休眠"，唯一途径是关闭 Modern Standby：
+> `reg add "HKLM\SYSTEM\CurrentControlSet\Control\Power" /v PlatformAoAcOverride /t REG_DWORD /d 0 /f`（管理员 + 重启；还原用 `reg delete` 同名值）。副作用：合盖与睡眠按钮不再进入睡眠。
+
+---
+
 ## 🚀 快速开始 (Quick Start)
 
 ### 方式一：直接下载便携版 (Single Executable)
@@ -111,8 +131,9 @@ build.bat
 
 | 快捷键 | 功能 |
 | :--- | :--- |
-| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd> | **一键即时熄屏** (DPMS D3 硬件切断，后台全速) |
-| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>B</kbd> | **全屏纯黑幕布** (针对截屏 Agent，按 Esc 退出) |
+| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>G</kbd> | **护屏保活**（背光 0 + 全黑幕 + 三层保活，<kbd>Esc</kbd> / 双击退出） |
+| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd> | **硬件熄屏**（DPMS；S0ix 平台会进新型待机，慎用于长任务） |
+| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>B</kbd> | **纯黑幕布**（不改背光，<kbd>Esc</kbd> / 双击退出） |
 
 ---
 

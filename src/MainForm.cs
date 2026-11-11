@@ -42,6 +42,7 @@ namespace AgentScreenGuard
         // 全局热键
         private const int HOTKEY_ID_SCREEN_OFF = 1001;
         private const int HOTKEY_ID_BLACK_MASK = 1002;
+        private const int HOTKEY_ID_GUARD = 1003;
 
         public MainForm()
         {
@@ -132,9 +133,9 @@ namespace AgentScreenGuard
             // 模式 1: 一键即时熄屏
             this.Controls.Add(CreateModeRow(
                 S(10), startY + 0 * (rowH + rowGap), rowW, rowH,
-                "⚡ 一键即时熄屏",
+                "⚡ 硬件熄屏 (DPMS)",
                 "[Ctrl+Alt+S]",
-                "【一键即时熄屏实现机理】\n底层通过广播发送 SC_MONITORPOWER 消息，指示 GPU 硬件关断显示链路 (DPMS D3)。\n• OLED: 各像素有机发光直接归零 (0.0000 nit)，整屏物理熄灭。\n• LCD: 液晶面板背光完全切断供电。\n• 唤醒方式: 晃动鼠标或敲击键盘任意按键即刻唤醒。\n• 具备微秒级按键防抖，避免松手弹起瞬间误唤醒。",
+                "⚠ 本机实测警告（AMD 780M + 无 S3 固件）\n这条熄屏指令会被固件直接映射成「进入新型待机 S0ix」：整机挂起、后台 Agent 全部中断，SetThreadExecutionState / PowerSetRequest 都拦不住。\n\n【实现机理】\n广播 SC_MONITORPOWER 指示 GPU 关断显示链路 (DPMS D3)：OLED 像素归零，LCD 背光断电。\n• 仅适合「短暂离开、此刻无长任务」的场景。\n• 通宵跑 Agent 请改用 🌑 护屏保活（下一项）。",
                 Color.FromArgb(56, 189, 248),
                 Color.FromArgb(2, 132, 199),
                 delegate { ExecuteScreenOff(); }
@@ -143,18 +144,12 @@ namespace AgentScreenGuard
             // 模式 2: Agent 守护保活 (防休眠)
             this.Controls.Add(CreateModeRow(
                 S(10), startY + 1 * (rowH + rowGap), rowW, rowH,
-                "🛡️ Agent 守护保活",
-                "[离开模式防休眠]",
-                "【Agent 守护保活实现机理】\n调用底层 Win32 内核 API SetThreadExecutionState，注入系统保活锁：\n(ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED)。\n• 强力阻止 Windows 进入 Modern Standby (S0ix) 或睡眠休眠挂起。\n• 屏幕硬件可完全熄灭切断显示，但 CPU、内存与网络保持全速运转，长夜通宵任务不断线。",
+                "🌑 护屏保活 (屏黑·不休眠)",
+                "[推荐 · Ctrl+Alt+G]",
+                "【护屏保活实现机理 —— 本机唯一可行的「屏灭而不进待机」路径】\n实测结论：本机无 S3，只有 Modern Standby (S0ix)，且固件把 DPMS 硬件熄屏直接映射为进入新型待机，任何内核电源锁都无效。\n所以本模式不向系统发「关屏」指令，而是：\n① 把内置屏背光压到 0（WMI WmiMonitorBrightnessMethods，失败则退化为 gamma 压暗）。\n② 跨屏覆盖一层纯黑置顶窗体，物理上遮住全部像素。\n③ 同时挂三层保活：PowerCreateRequest/PowerSetRequest 内核请求 + 每 10 秒重申 ES_SYSTEM_REQUIRED 的后台线程 + 电源方案空闲超时临时归零。\n• 系统始终认为屏幕开着 → 永不进入新型待机，CPU、内存、网络、后台 Agent 全速运行。\n• 退出（Esc / 双击）即精确还原背光、gamma 与电源策略。",
                 Color.FromArgb(52, 211, 153),
                 Color.FromArgb(5, 150, 105),
-                delegate
-                {
-                    PowerManager.SetKeepAlive(true);
-                    if (_chkKeepAlive != null) _chkKeepAlive.Checked = true;
-                    UpdatePowerStatusDisplay();
-                    ExecuteScreenOff();
-                }
+                delegate { StartGuardMode(); }
             ));
 
             // 模式 3: 锁定工作站并熄屏
@@ -162,7 +157,7 @@ namespace AgentScreenGuard
                 S(10), startY + 2 * (rowH + rowGap), rowW, rowH,
                 "🔒 锁定工作站并熄屏",
                 "[Win+L 锁屏]",
-                "【锁定工作站并熄屏实现机理】\n先执行 Win32 API LockWorkStation() 锁定当前 Windows 桌面，随后硬件切断显示信号。\n• 适用于离开工位、外出防窥且需要后台长任务持续运转的场景。\n• 点亮屏幕后需输入 Windows 账户密码方可进入桌面。",
+                "【锁定工作站并熄屏实现机理】\n先调 Win32 API LockWorkStation() 锁屏，随后硬件切断显示信号。\n• 适合离开工位、外出防窥。\n• 点亮屏幕需输入 Windows 密码。\n⚠ 本机同样会触发新型待机（锁屏+熄屏指令），长任务期间请勿使用。",
                 Color.FromArgb(167, 139, 250),
                 Color.FromArgb(109, 40, 217),
                 delegate { ExecuteLockAndTurnOff(); }
@@ -171,12 +166,12 @@ namespace AgentScreenGuard
             // 模式 4: OLED 纯黑置顶幕布
             this.Controls.Add(CreateModeRow(
                 S(10), startY + 3 * (rowH + rowGap), rowW, rowH,
-                "⬛ OLED 纯黑置顶幕布",
+                "⬛ 纯黑幕布 (不改背光)",
                 "[Ctrl+Alt+B]",
-                "【OLED 纯黑置顶幕布实现机理】\n跨多屏幕覆盖无边框顶级全黑窗体 (#000000)。\n• OLED 像素纯黑不发光防烧屏，且不切断 GPU 显示链路。\n• 显存帧缓冲区与分辨率完好保留，彻底避免 pyautogui / CV 视觉自动化截取黑帧。\n• 按 Esc 键或鼠标点击即可秒速退出。",
+                "【纯黑幕布实现机理】\n跨多屏覆盖无边框全黑窗体 (#000000)，不切断 GPU 显示链路、不调背光。\n• 帧缓冲与分辨率完好保留，pyautogui / CV 截图仍能取到完整桌面画面。\n• 与 🌑 护屏保活的区别：不压背光（LCD 背光仍亮）。\n• 按 Esc 键或双击即可秒速退出。",
                 Color.FromArgb(251, 191, 36),
                 Color.FromArgb(217, 119, 6),
-                delegate { BlackMaskForm.ShowMask(); }
+                delegate { BlackMaskForm.ShowMask(false); }
             ));
 
             // ---------------------------------------------------------
@@ -388,8 +383,10 @@ namespace AgentScreenGuard
             _trayMenu.Items.Add(itemShow);
             _trayMenu.Items.Add(new ToolStripSeparator());
 
-            _trayMenu.Items.Add("一键即时熄屏 (Ctrl+Alt+S)", null, delegate { ExecuteScreenOff(); });
-            _trayMenu.Items.Add("全屏纯黑幕布 (Ctrl+Alt+B)", null, delegate { BlackMaskForm.ShowMask(); });
+            _trayMenu.Items.Add("🌑 护屏模式：屏黑·整机不休眠 (Ctrl+Alt+G)", null, delegate { StartGuardMode(); });
+            _trayMenu.Items.Add("恢复屏幕（结束护屏）", null, delegate { BlackMaskForm.HideMask(); });
+            _trayMenu.Items.Add("⚡ 硬件熄屏（会进新型待机） (Ctrl+Alt+S)", null, delegate { ExecuteScreenOff(); });
+            _trayMenu.Items.Add("⬛ 纯黑幕布（不改背光） (Ctrl+Alt+B)", null, delegate { BlackMaskForm.ShowMask(false); });
             _trayMenu.Items.Add("锁定工作站并熄屏", null, delegate { ExecuteLockAndTurnOff(); });
 
             ToolStripMenuItem itemToggleKeepAlive = new ToolStripMenuItem("切换防休眠保活", null, delegate
@@ -452,12 +449,14 @@ namespace AgentScreenGuard
         {
             PowerManager.RegisterHotKey(this.Handle, HOTKEY_ID_SCREEN_OFF, PowerManager.MOD_CONTROL | PowerManager.MOD_ALT, (uint)Keys.S);
             PowerManager.RegisterHotKey(this.Handle, HOTKEY_ID_BLACK_MASK, PowerManager.MOD_CONTROL | PowerManager.MOD_ALT, (uint)Keys.B);
+            PowerManager.RegisterHotKey(this.Handle, HOTKEY_ID_GUARD, PowerManager.MOD_CONTROL | PowerManager.MOD_ALT, (uint)Keys.G);
         }
 
         private void UnregisterGlobalHotkeys()
         {
             PowerManager.UnregisterHotKey(this.Handle, HOTKEY_ID_SCREEN_OFF);
             PowerManager.UnregisterHotKey(this.Handle, HOTKEY_ID_BLACK_MASK);
+            PowerManager.UnregisterHotKey(this.Handle, HOTKEY_ID_GUARD);
         }
 
         protected override void WndProc(ref Message m)
@@ -470,9 +469,13 @@ namespace AgentScreenGuard
                 {
                     ExecuteScreenOff();
                 }
+                else if (id == HOTKEY_ID_GUARD)
+                {
+                    StartGuardMode();
+                }
                 else if (id == HOTKEY_ID_BLACK_MASK)
                 {
-                    BlackMaskForm.ShowMask();
+                    BlackMaskForm.ShowMask(false);
                 }
             }
         }
@@ -513,6 +516,18 @@ namespace AgentScreenGuard
                 case 4: return 2000;
                 default: return 1000;
             }
+        }
+
+        /// <summary>
+        /// 护屏模式：背光归零 + 全黑幕布 + 三层保活。
+        /// 本机固件会把 DPMS 熄屏映射成新型待机，这是唯一能做到「屏幕不亮、整机照常跑」的路径。
+        /// </summary>
+        private void StartGuardMode()
+        {
+            PowerManager.SetKeepAlive(true);
+            if (_chkKeepAlive != null) _chkKeepAlive.Checked = true;
+            UpdatePowerStatusDisplay();
+            BlackMaskForm.ShowMask(true);
         }
 
         private void ExecuteScreenOff()
@@ -572,11 +587,13 @@ namespace AgentScreenGuard
                     string output = proc.StandardOutput.ReadToEnd();
                     proc.WaitForExit();
 
-                    string info = "Windows 当前活动电源策略数值校核:\n\n" +
-                                  "• STANDBYIDLE (待机休眠): 交流电源 0x0 表示插电永不休眠\n" +
-                                  "• VIDEOIDLE (熄屏超时): 为自动关屏倒计时秒数\n" +
-                                  "• 本软件「Agent守护」模式直接注入 SetThreadExecutionState 内核锁，100% 免疫系统休眠。\n\n" +
-                                  "底层原始输出节选:\n" + output.Substring(0, Math.Min(output.Length, 450));
+                    string info = "本机平台事实（已实测，三次对照实验）:\n" +
+                                  "• 无 S3，仅 Modern Standby (S0ix)；AMD 780M 平台把 DPMS 熄屏直接映射为进入新型待机。\n" +
+                                  "• 关屏瞬间即写 Kernel-Power 506，SetThreadExecutionState(DISPLAY/SYSTEM/AWAYMODE)、\n" +
+                                  "  PowerSetRequest(SystemRequired/ExecutionRequired) 全部被固件无视。\n" +
+                                  "• DDC/CI (VCP 0xD6) 返回 ERROR_GEN_FAILURE，不支持显示器级硬关屏。\n" +
+                                  "• 因此护屏模式不关屏：背光压 0 + 全黑窗体，系统始终认为屏幕开着。\n\n" +
+                                  "电源策略原始输出节选:\n" + output.Substring(0, Math.Min(output.Length, 800));
 
                     MessageBox.Show(info, "待机策略参数校核", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }

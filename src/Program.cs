@@ -24,6 +24,17 @@ namespace AgentScreenGuard
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
 
+                // 上次若被强杀，电源方案的“空闲睡眠/休眠”可能仍被改成 0，这里先精确还原
+                try { PowerManager.RestoreLeftoverOverrides(); }
+                catch { }
+
+                // 进程退出时兜底还原电源超时（MainForm 正常关闭也会调用，重复调用无害）
+                Application.ApplicationExit += delegate(object sender, EventArgs e)
+                {
+                    try { PowerManager.SetKeepAlive(false); }
+                    catch { }
+                };
+
                 // 全局未处理异常保护
                 Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e)
                 {

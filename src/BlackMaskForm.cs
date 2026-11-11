@@ -1,25 +1,32 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Windows.Forms;
 
 namespace AgentScreenGuard
 {
     /// <summary>
-    /// OLED 纯黑置顶防烧屏幕布
-    /// 针对依赖屏幕截取 (pyautogui/CV 视觉识别) 的自动化 Agent 设计：
-    /// 1. 覆盖所有活动显示器（支持多显示器跨屏）；
-    /// 2. OLED 屏幕各有机子像素发光强度直接归零 (0.0000 nits)；
-    /// 3. 不切断 GPU 显示链路 (不触发 DPMS D3)，显存与原生分辨率完好保留；
-    /// 4. 按 Esc、空格或鼠标单击立即退出。
+    /// 纯黑置顶护屏幕布（假黑屏方案）。
+    ///
+    /// 本机实测结论：AMD 平台固件把 DPMS 硬件熄屏直接映射为进入新型待机 (S0ix)，
+    /// 任何 SetThreadExecutionState / PowerSetRequest 都拦不住，DDC/CI 也不支持。
+    /// 因此这里不向系统发“关屏”指令，而是：
+    /// 1. 把内置屏背光压到 0（BlackMaskForm 关闭时精确还原）；
+    /// 2. 覆盖所有活动显示器，铺一层纯黑置顶窗体；
+    /// 3. 系统始终认为显示器是开着的，于是永远不会触发新型待机，CPU/网络/Agent 全程满速。
+    /// 4. 按 Esc / 空格 / 回车，或鼠标单击立即退出并还原背光。
     /// </summary>
     public class BlackMaskForm : Form
     {
         private static BlackMaskForm _currentInstance = null;
         private bool _isCursorHidden = false;
+        private bool _dim;
+        private DateTime _shownAt;
 
-        public BlackMaskForm()
+        public BlackMaskForm(bool dim)
         {
-            this.Text = "AgentScreenGuard - OLED Black Mask";
+            _dim = dim;
+
+            this.Text = "AgentScreenGuard - 纯黑护屏";
             this.FormBorderStyle = FormBorderStyle.None;
             this.BackColor = Color.Black;
             this.TopMost = true;
@@ -31,7 +38,7 @@ namespace AgentScreenGuard
 
             this.KeyPreview = true;
             this.KeyDown += new KeyEventHandler(OnKeyDownHandler);
-            this.Click += new EventHandler(OnClickHandler);
+            this.MouseDown += new MouseEventHandler(OnMouseDownHandler);
         }
 
         private void OnKeyDownHandler(object sender, KeyEventArgs e)
@@ -42,9 +49,12 @@ namespace AgentScreenGuard
             }
         }
 
-        private void OnClickHandler(object sender, EventArgs e)
+        // 只认双击：pyautogui / 自动化脚本的单击不会误关护屏
+        private void OnMouseDownHandler(object sender, MouseEventArgs e)
         {
-            ExitMask();
+            if (e.Button != MouseButtons.Left) return;
+            if ((DateTime.UtcNow - _shownAt).TotalMilliseconds < 1200) return;
+            if (e.Clicks >= 2) ExitMask();
         }
 
         private void ExitMask()
@@ -56,10 +66,24 @@ namespace AgentScreenGuard
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
+            _shownAt = DateTime.UtcNow;
+
+            if (_dim)
+            {
+                try { BrightnessControl.DimForMask(); }
+                catch { }
+            }
+
             if (!_isCursorHidden)
             {
-                Cursor.Hide();
-                _isCursorHidden = true;
+                try
+                {
+                    Cursor.Hide();
+                    _isCursorHidden = true;
+                }
+                catch
+                {
+                }
             }
         }
 
@@ -67,7 +91,13 @@ namespace AgentScreenGuard
         {
             if (_isCursorHidden)
             {
-                Cursor.Show();
+                try
+                {
+                    Cursor.Show();
+                }
+                catch
+                {
+                }
                 _isCursorHidden = false;
             }
         }
@@ -76,19 +106,46 @@ namespace AgentScreenGuard
         {
             base.OnFormClosed(e);
             RestoreCursor();
+
+            if (_dim)
+            {
+                try { BrightnessControl.RestoreAfterMask(); }
+                catch { }
+            }
+
             _currentInstance = null;
+        }
+
+        public static bool IsShowing
+        {
+            get { return _currentInstance != null && !_currentInstance.IsDisposed; }
         }
 
         public static void ShowMask()
         {
+            ShowMask(false);
+        }
+
+        /// <summary>dim=true 时同时把背光压到 0（安全模式：屏灭但系统绝不进待机）</summary>
+        public static void ShowMask(bool dim)
+        {
             if (_currentInstance != null && !_currentInstance.IsDisposed)
             {
+                if (dim) BrightnessControl.DimForMask();
                 _currentInstance.Activate();
                 return;
             }
 
-            _currentInstance = new BlackMaskForm();
+            _currentInstance = new BlackMaskForm(dim);
             _currentInstance.Show();
+        }
+
+        public static void HideMask()
+        {
+            if (_currentInstance != null && !_currentInstance.IsDisposed)
+            {
+                _currentInstance.Close();
+            }
         }
     }
 }
