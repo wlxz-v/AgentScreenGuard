@@ -1,10 +1,10 @@
-﻿# AgentScreenGuard (护屏卫士)
+# AgentScreenGuard (护屏卫士)
 
 <div align="center">
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%207%2F8%2F10%2F11-0078d7.svg)](https://microsoft.com/windows)
-[![Binary Size](https://img.shields.io/badge/Binary%20Size-~25%20KB-success.svg)](bin/AgentScreenGuard.exe)
+[![Binary Size](https://img.shields.io/badge/Binary%20Size-~50%20KB-success.svg)](https://github.com/wlxz-v/AgentScreenGuard/releases)
 [![Zero Dependency](https://img.shields.io/badge/Dependencies-Zero%20(Pure%20Native)-brightgreen.svg)](#)
 [![DPI Aware](https://img.shields.io/badge/DPI-Per--Monitor%20V2-blueviolet.svg)](#)
 
@@ -104,12 +104,8 @@ MONITOR_OFF: 2                               ES_SYSTEM_REQUIRED (0x00000001)
 ## 🚀 快速开始 (Quick Start)
 
 ### 方式一：直接下载便携版 (Single Executable)
-1. 前往 GitHub [Releases](https://github.com) 页面下载 `AgentScreenGuard.exe`。
+1. 前往 [Releases](https://github.com/wlxz-v/AgentScreenGuard/releases) 页面下载 `AgentScreenGuard.exe`。
 2. 双击直接运行，无需安装，即下即用。
-
-### 方式二：使用桌面交互批处理
-本项目同时提供了免编译的纯原生批处理版本：
-- 桌面控制台脚本：`屏幕管理与Agent保活.bat`
 
 ---
 
@@ -118,7 +114,7 @@ MONITOR_OFF: 2                               ES_SYSTEM_REQUIRED (0x00000001)
 本项目采用**纯零依赖极简构建**。任何一台搭载 Windows 7/8/10/11 的电脑，均自带了 .NET Framework 原生 C# 编译器（`csc.exe`），无需安装 Visual Studio 或 .NET Core SDK 即可在 1 秒内完成编译：
 
 ```cmd
-git clone https://github.com/your-username/AgentScreenGuard.git
+git clone https://github.com/wlxz-v/AgentScreenGuard.git
 cd AgentScreenGuard
 build.bat
 ```

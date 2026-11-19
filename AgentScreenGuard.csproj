@@ -39,6 +39,7 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Management" />
     <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
   <ItemGroup>
@@ -46,6 +47,7 @@
     <Compile Include="src\MainForm.cs" />
     <Compile Include="src\PowerManager.cs" />
     <Compile Include="src\BlackMaskForm.cs" />
+    <Compile Include="src\BrightnessControl.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="src\app.config" />
